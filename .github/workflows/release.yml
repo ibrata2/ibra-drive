@@ -1,0 +1,57 @@
+name: Build & Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GODOT_VERSION: "4.3"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version from tag
+        id: ver
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          if [[ ! "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then V="1.1.0"; fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Install Godot + export templates
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          unzip -q Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 godot
+          wget -q https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz
+          mkdir -p ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          unzip -q -j Godot_v${GODOT_VERSION}-stable_export_templates.tpz "templates/windows_release_x86_64.exe" "templates/version.txt" -d ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          rm Godot_v${GODOT_VERSION}-stable_export_templates.tpz
+
+      - name: Export Windows exe
+        run: |
+          mkdir -p build
+          ./godot --headless --editor --quit --path . || true
+          ./godot --headless --path . --export-release "Windows Desktop" build/IBRA_DRIVE.exe
+          ls -la build
+
+      - name: Build installer (NSIS)
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q nsis
+          makensis -V2 -DVERSION=${{ steps.ver.outputs.version }} installer/ibra_drive.nsi
+          ls -la build
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: IBRA DRIVE v${{ steps.ver.outputs.version }}
+          body_path: installer/release_notes.md
+          files: |
+            build/IBRA_DRIVE_Setup_${{ steps.ver.outputs.version }}.exe
+            build/IBRA_DRIVE.exe
