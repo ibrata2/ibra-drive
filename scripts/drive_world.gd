@@ -176,6 +176,8 @@ func _ready() -> void:
 	car.global_transform = Transform3D(Basis(Vector3.UP, road_yaw(-26.0)), Vector3(spawn.x, spawn_h + 1.4, spawn.z))
 	safe_hist.clear()
 	hud.minimap.visible = false
+	if Game.is_mobile():
+		hud.hint.visible = false
 	hud.hint.text = "W/S قيادة • A/D توجيه • Space هاند بريك • H زمّور • C كاميرا • L أضواء • E تفاعل • R تعديل • T مساعدة الطريق • P صورة • Esc قائمة"
 	cam.far = 1400.0
 	hud.loot_panel.visible = false
@@ -2501,14 +2503,12 @@ func _input(event: InputEvent) -> void:
 		if paused:
 			super(event)
 		return
-	if event is InputEventKey and event.pressed and not event.echo:
-		var k := (event as InputEventKey).physical_keycode
-		if k == KEY_H:
-			_horn()
-			return
-		if k == KEY_P:
-			_photo()
-			return
+	if event.is_action_pressed("horn"):
+		_horn()
+		return
+	if event.is_action_pressed("photo"):
+		_photo()
+		return
 	if event.is_action_pressed("interact"):
 		_interact()
 		return

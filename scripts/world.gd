@@ -1502,6 +1502,10 @@ func _spawn_car() -> void:
 	hud.quit_pressed.connect(func(): get_tree().quit())
 	audio = AudioScript.new()
 	add_child(audio)
+	if Game.is_mobile():
+		add_child(preload("res://scripts/touch_controls.gd").new())
+		hud.hint.visible = false
+		hud.minimap.call_deferred("set_position", hud.minimap.position + Vector2(0, -270))
 
 
 func _build_minimap_tex() -> void:

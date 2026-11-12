@@ -113,7 +113,7 @@ func _build_ui() -> void:
 	v.add_child(sp)
 	var info := UIKit.label("فلوس %d  •  السمعة %d (%s)  •  مستوى الاستكشاف %d" % [int(Game.data["coins"]), Jobs.rep(), Jobs.rep_title(), Game.level()], 17, Color(1, 0.82, 0.35))
 	v.add_child(info)
-	var ver := UIKit.label("v2.0.0  •  برمجة وتطوير إبراهيم الخزرجي\nتليكرام: t.me/ibraprogram  •  تيك توك: ibraprogram", 15, Color(0.62, 0.65, 0.72))
+	var ver := UIKit.label("v2.1.0  •  برمجة وتطوير إبراهيم الخزرجي\nتليكرام: t.me/ibraprogram  •  تيك توك: ibraprogram", 15, Color(0.62, 0.65, 0.72))
 	v.add_child(ver)
 
 

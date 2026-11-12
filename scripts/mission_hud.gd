@@ -219,13 +219,13 @@ func _build_bottom() -> void:
 	radar.custom_minimum_size = Vector2(240, 240)
 	radar.size = Vector2(240, 240)
 	radar.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	radar.position = Vector2(-260, -260)
+	radar.position = Vector2(-260, -260) if not Game.is_mobile() else Vector2(-260, -700)
 	radar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(radar)
 	fatigue_box = PanelContainer.new()
 	(fatigue_box as PanelContainer).add_theme_stylebox_override("panel", _style(Color(0.04, 0.05, 0.07, 0.55)))
 	fatigue_box.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	fatigue_box.position = Vector2(20, -130)
+	fatigue_box.position = Vector2(20, -130) if not Game.is_mobile() else Vector2(20, -400)
 	fatigue_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(fatigue_box)
 	var v := VBoxContainer.new()

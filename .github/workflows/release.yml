@@ -8,22 +8,28 @@ on:
 permissions:
   contents: write
 
+env:
+  GODOT_VERSION: "4.3"
+
 jobs:
-  build:
+  version:
     runs-on: ubuntu-latest
-    env:
-      GODOT_VERSION: "4.3"
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Version from tag
-        id: ver
+      - id: ver
         run: |
           V="${GITHUB_REF_NAME#v}"
           if [[ ! "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then V="$(cat installer/VERSION | tr -d '[:space:]')"; fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
 
-      - name: Install Godot + export templates
+  windows:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Godot + Windows template
         run: |
           wget -q https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
           unzip -q Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
@@ -32,26 +38,133 @@ jobs:
           mkdir -p ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
           unzip -q -j Godot_v${GODOT_VERSION}-stable_export_templates.tpz "templates/windows_release_x86_64.exe" "templates/version.txt" -d ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
           rm Godot_v${GODOT_VERSION}-stable_export_templates.tpz
-
       - name: Export Windows exe
         run: |
           mkdir -p build
           ./godot --headless --editor --quit --path . || true
           ./godot --headless --path . --export-release "Windows Desktop" build/IBRA_DRIVE.exe
           ls -la build
-
       - name: Build installer (NSIS)
         run: |
           sudo apt-get update -q && sudo apt-get install -y -q nsis
-          makensis -V2 -DVERSION=${{ steps.ver.outputs.version }} installer/ibra_drive.nsi
+          makensis -V2 -DVERSION=${{ needs.version.outputs.version }} installer/ibra_drive.nsi
           ls -la build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            build/IBRA_DRIVE_Setup_${{ needs.version.outputs.version }}.exe
+            build/IBRA_DRIVE.exe
 
+  android:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install Godot + Android templates
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          unzip -q Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 godot
+          wget -q https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz
+          mkdir -p ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          unzip -q -j Godot_v${GODOT_VERSION}-stable_export_templates.tpz "templates/android_release.apk" "templates/android_debug.apk" "templates/version.txt" -d ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          rm Godot_v${GODOT_VERSION}-stable_export_templates.tpz
+      - name: Editor settings (Android SDK + Java)
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          echo "SDK=$SDK JAVA=$JAVA_HOME"
+          ls "$SDK/build-tools" | tail -3
+          mkdir -p ~/.config/godot
+          ./godot --headless --editor --quit --path . || true
+          F=~/.config/godot/editor_settings-${GODOT_VERSION}.tres
+          if [ -f "$F" ]; then
+            sed -i '/export\/android\/android_sdk_path/d; /export\/android\/java_sdk_path/d' "$F"
+            echo "export/android/android_sdk_path = \"$SDK\"" >> "$F"
+            echo "export/android/java_sdk_path = \"$JAVA_HOME\"" >> "$F"
+          else
+            printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/java_sdk_path = "%s"\n' "$SDK" "$JAVA_HOME" > "$F"
+          fi
+          tail -5 "$F"
+      - name: Export Android APK
+        env:
+          GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ github.workspace }}/android/ibra_release.keystore
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: ibraprogram
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASS || '139911972e03b72f093a9a97' }}
+        run: |
+          mkdir -p build
+          ./godot --headless --path . --export-release "Android" build/IBRA_DRIVE_${{ needs.version.outputs.version }}.apk
+          ls -la build
+          test -f build/IBRA_DRIVE_${{ needs.version.outputs.version }}.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: build/IBRA_DRIVE_${{ needs.version.outputs.version }}.apk
+
+  ios:
+    needs: version
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Godot (macOS) + iOS template
+        run: |
+          curl -sSL -o godot.zip https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_macos.universal.zip
+          unzip -q godot.zip
+          curl -sSL -o tpl.tpz https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz
+          T="$HOME/Library/Application Support/Godot/export_templates/${GODOT_VERSION}.stable"
+          mkdir -p "$T"
+          unzip -q -j tpl.tpz "templates/ios.zip" "templates/version.txt" -d "$T"
+          rm tpl.tpz
+          ls -la "$T"
+      - name: Export Xcode project
+        run: |
+          G="./Godot.app/Contents/MacOS/Godot"
+          mkdir -p build/ios
+          "$G" --headless --editor --quit --path . || true
+          "$G" --headless --path . --export-release "iOS" build/ios/IBRA_DRIVE.ipa
+          ls -la build/ios
+      - name: Build unsigned IPA
+        run: |
+          cd build/ios
+          PROJ=$(ls -d *.xcodeproj | head -1)
+          SCHEME="${PROJ%.xcodeproj}"
+          xcodebuild -project "$PROJ" -scheme "$SCHEME" -configuration Release -sdk iphoneos \
+            -archivePath "$PWD/app.xcarchive" archive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
+            | tail -30
+          APP=$(find app.xcarchive/Products/Applications -maxdepth 1 -name "*.app" | head -1)
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -qry "../IBRA_DRIVE_${{ needs.version.outputs.version }}_unsigned.ipa" Payload
+          ls -la ..
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios
+          path: build/IBRA_DRIVE_${{ needs.version.outputs.version }}_unsigned.ipa
+
+  release:
+    needs: [version, windows, android, ios]
+    if: ${{ always() && needs.windows.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - run: ls -R dist
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.ver.outputs.version }}
-          name: IBRA DRIVE v${{ steps.ver.outputs.version }}
+          tag_name: v${{ needs.version.outputs.version }}
+          name: IBRA DRIVE v${{ needs.version.outputs.version }}
           body_path: installer/release_notes.md
+          fail_on_unmatched_files: false
           files: |
-            build/IBRA_DRIVE_Setup_${{ steps.ver.outputs.version }}.exe
-            build/IBRA_DRIVE.exe
+            dist/windows/IBRA_DRIVE_Setup_${{ needs.version.outputs.version }}.exe
+            dist/windows/IBRA_DRIVE.exe
+            dist/android/IBRA_DRIVE_${{ needs.version.outputs.version }}.apk
+            dist/ios/IBRA_DRIVE_${{ needs.version.outputs.version }}_unsigned.ipa

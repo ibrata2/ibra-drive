@@ -90,7 +90,7 @@ func _setup_input() -> void:
 		"steer_left": [KEY_A, KEY_LEFT], "steer_right": [KEY_D, KEY_RIGHT],
 		"handbrake": [KEY_SPACE], "nitro": [KEY_SHIFT], "camera": [KEY_C],
 		"interact": [KEY_E], "reset_car": [KEY_R], "tow": [KEY_T],
-		"pause": [KEY_ESCAPE], "headlights": [KEY_L],
+		"pause": [KEY_ESCAPE], "headlights": [KEY_L], "horn": [KEY_H], "photo": [KEY_P],
 	}
 	for action in keys:
 		if not InputMap.has_action(action):
@@ -308,6 +308,10 @@ func missing_text(cost: Dictionary) -> String:
 		if cost.has(k) and int(data.get(k, 0)) < int(cost[k]):
 			parts.append("%d %s" % [int(cost[k]) - int(data.get(k, 0)), RES_NAMES[k]])
 	return " • ".join(parts)
+
+
+func is_mobile() -> bool:
+	return OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios") or OS.get_cmdline_user_args().has("--touch")
 
 
 func active_car() -> String:

@@ -3,6 +3,7 @@ config_version=5
 
 [application]
 
+config/version="2.1.0"
 config/name="IBRA DRIVE"
 config/description="مغامرات بالسيارات — أكثر من 100 مكان"
 run/main_scene="res://main.tscn"
@@ -23,6 +24,7 @@ window/size/viewport_width=1600
 window/size/viewport_height=900
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
+window/handheld/orientation=4
 
 [physics]
 
@@ -30,6 +32,11 @@ common/physics_ticks_per_second=120
 common/max_physics_steps_per_frame=12
 
 [rendering]
+
+renderer/rendering_method.mobile="mobile"
+textures/vram_compression/import_etc2_astc=true
+anti_aliasing/quality/msaa_3d.mobile=0
+lights_and_shadows/directional_shadow/size.mobile=2048
 
 anti_aliasing/quality/msaa_3d=2
 lights_and_shadows/directional_shadow/size=4096
