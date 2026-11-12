@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6c25b"/><stop offset="1" stop-color="#c9772c"/></linearGradient></defs>
+<rect width="128" height="128" rx="26" fill="#14161c"/>
+<path d="M8 92 Q40 70 64 84 T120 78 L120 120 L8 120 Z" fill="url(#g)"/>
+<rect x="34" y="58" width="60" height="18" rx="5" fill="#f2f2ee"/>
+<rect x="46" y="46" width="30" height="16" rx="4" fill="#f2f2ee"/>
+<rect x="50" y="49" width="22" height="9" rx="2" fill="#2a3340"/>
+<circle cx="46" cy="78" r="9" fill="#111"/><circle cx="82" cy="78" r="9" fill="#111"/>
+<text x="64" y="32" font-family="Arial" font-weight="bold" font-size="22" text-anchor="middle" fill="#f6c25b">IBRA</text>
+</svg>
