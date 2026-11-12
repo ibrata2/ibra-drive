@@ -83,6 +83,7 @@ var track_count := 0
 var track_last: Array = []
 var ring: MeshInstance3D
 var props_body: StaticBody3D
+var terrain_body: StaticBody3D
 var minimap_tex: ImageTexture
 
 # الوقت والجو
@@ -106,6 +107,9 @@ var tow_confirm := 0.0
 var safe_hist: Array = []
 var safe_timer := 0.0
 var stuck_timer := 0.0
+var r_press_t := 0.0
+var still_timer := 0.0
+var still_ref := Vector3.ZERO
 var water_timer := 0.0
 var fuel_warned := false
 var treasure_hint_t := 0.0
@@ -152,6 +156,8 @@ func _ready() -> void:
 	_build_minimap_tex()
 	_update_daylight(0.0)
 	hud.toast("أهلاً بيك في %s" % place["name"], Color(1, 0.86, 0.5), 4.0)
+	if OS.get_cmdline_user_args().has("--test-rescue"):
+		get_tree().create_timer(2.0).timeout.connect(_test_rescue)
 	if Game.test_car != "":
 		hud.toast("تجربة سيارة: %s" % Game.get_car(Game.test_car)["name"], Color(0.5, 0.9, 1.0), 5.0)
 	hud.toast("اجمع الأغراض وارجع للكراج (المربع الأخضر) حتى تحفظها", Color(0.85, 0.9, 1.0), 6.0)
@@ -232,7 +238,7 @@ func _raw_h(x: float, z: float, flatten := true) -> float:
 	var n := noise_a.get_noise_2d(x, z)
 	var h := 0.0
 	if biome["ridge"]:
-		var r := 1.0 - absf(n)
+		var r := 1.0 - sqrt(n * n + 0.02)
 		h = r * r * amp
 	else:
 		h = (n * 0.5 + 0.5) * amp
@@ -431,6 +437,7 @@ func _build_terrain() -> void:
 	mi.material_override = ground_mat
 	add_child(mi)
 	var body := StaticBody3D.new()
+	terrain_body = body
 	var cs := CollisionShape3D.new()
 	var hs := HeightMapShape3D.new()
 	hs.map_width = n
@@ -1545,10 +1552,15 @@ func _input(event: InputEvent) -> void:
 		auto_lights = false
 		car.set_lights(not car.lights_on)
 	elif event.is_action_pressed("reset_car"):
-		if stuck_timer > 1.5 or car.water_depth > -0.3 or car.fuel <= 0.0:
-			_rescue("رجعناك لمكان آمن", false)
-		else:
+		var hs := Vector2(car.linear_velocity.x, car.linear_velocity.z).length()
+		if car.is_flipped() and _spot_ok(car.global_position, 0.85) and r_press_t <= 0.0:
 			car.reset_upright()
+			r_press_t = 3.0
+			hud.toast("عدّلنا السيارة — اضغط R مرة ثانية إذا بعدك عالك", Color(0.8, 0.9, 1.0), 2.5)
+		elif hs > 12.0 and not car.is_flipped():
+			hud.toast("وكّف السيارة أول وبعدين اضغط R", Color(1, 0.8, 0.5), 2.0)
+		else:
+			_rescue("رجعناك لمكان آمن", false)
 	elif event.is_action_pressed("interact"):
 		if _near_garage():
 			Game.end_trip(1.0, "garage")
@@ -1628,7 +1640,7 @@ func _update_prompt() -> void:
 		txt = "السيارة انقلبت — اضغط R حتى تعدلها"
 	elif water_timer > 1.5:
 		txt = "انت بالماي! اطلع منه أو اضغط R حتى ترجع لمكان آمن (يرجعك وحده بعد %d ثواني)" % int(ceil(6.0 - water_timer))
-	elif stuck_timer > 3.0:
+	elif stuck_timer > 3.0 or still_timer > 3.0:
 		txt = "علكت؟ اضغط R حتى ترجع لمكان آمن"
 	elif treasure_hint_t > 0.0:
 		txt = "الكنز قريب منك! دوّر حواليك..."
@@ -1722,6 +1734,18 @@ func _check_hazards(delta: float) -> void:
 	elif hspeed > 3.0:
 		stuck_timer = maxf(stuck_timer - delta * 3.0, 0.0)
 	water_timer = water_timer + delta if in_water else 0.0
+	r_press_t = maxf(r_press_t - delta, 0.0)
+	# علكة حسب المكان: 10 ثواني ما تحرك 2.5 متر وهو يحاول يسوق
+	var trying := car.throttle_in > 0.2 or car.brake_in > 0.2 or absf(car.steer_in) > 0.2
+	if car.global_position.distance_to(still_ref) > 2.5:
+		still_ref = car.global_position
+		still_timer = 0.0
+	elif trying and not _near_garage():
+		still_timer += delta
+	if still_timer > 10.0:
+		still_timer = 0.0
+		_rescue("السيارة علكت، رجعناك لمكان آمن", false)
+		return
 	# حمم = رجوع فوري
 	if water_kind == "lava" and car.water_depth > -0.3:
 		_rescue("احترقت السيارة بالحمم! رجعناك لمكان آمن", true)
@@ -1777,7 +1801,7 @@ func _record_safe() -> void:
 	if car.grounded_count < 3 or car.is_flipped() or car.water_depth > -0.8:
 		return
 	var p := car.global_position
-	if not _is_safe_spot(p):
+	if not _spot_ok(p, 0.86):
 		return
 	if not safe_hist.is_empty() and (safe_hist[safe_hist.size() - 1][0] as Vector3).distance_to(p) < 4.0:
 		return
@@ -1788,10 +1812,68 @@ func _record_safe() -> void:
 
 
 ## يرجّع السيارة لمكان آمن قديم شوية (مو آخر نقطة حتى ما ترجع تطيح)
+## نقطة مستوية وبعيدة عن الماي ومو بحفرة
+func _spot_ok(p: Vector3, min_up: float) -> bool:
+	if absf(p.x) > SIZE / 2.0 - 25.0 or absf(p.z) > SIZE / 2.0 - 25.0:
+		return false
+	var h := h_at(p.x, p.z)
+	if has_water and h < water_level + 1.0:
+		return false
+	if city_density > 0.0 and in_building(p.x, p.z, 3.0):
+		return false
+	var avg := 0.0
+	for o in [Vector2(5, 0), Vector2(-5, 0), Vector2(0, 5), Vector2(0, -5), Vector2(3.5, 3.5), Vector2(-3.5, -3.5), Vector2(3.5, -3.5), Vector2(-3.5, 3.5)]:
+		var hh := h_at(p.x + o.x, p.z + o.y)
+		if has_water and hh < water_level + 0.6:
+			return false
+		if normal_at(p.x + o.x, p.z + o.y).y < min_up - 0.05:
+			return false
+		avg += hh
+	avg /= 8.0
+	if h < avg - 0.6:
+		return false
+	if normal_at(p.x, p.z).y < min_up:
+		return false
+	# ما بيها أشياء صلبة قريبة
+	var space := get_world_3d().direct_space_state
+	var q := PhysicsShapeQueryParameters3D.new()
+	var sph := SphereShape3D.new()
+	sph.radius = 3.0
+	q.shape = sph
+	q.transform = Transform3D(Basis(), Vector3(p.x, h + 1.6, p.z))
+	q.collision_mask = 1
+	var ex: Array[RID] = [car.get_rid()]
+	q.exclude = ex
+	for hit in space.intersect_shape(q, 8):
+		var col = hit.get("collider")
+		if col != null and col != terrain_body:
+			return false
+	return true
+
+
+## يدوّر أقرب مكان آمن حوالين السيارة (10 إلى 90 متر)
+func _find_safe_near(center: Vector3) -> Vector3:
+	for min_up in [0.92, 0.85, 0.78]:
+		var rr := 10.0
+		while rr <= 90.0:
+			for k in 16:
+				var a := TAU * k / 16.0 + rr * 0.37
+				var p := Vector3(center.x + cos(a) * rr, 0, center.z + sin(a) * rr)
+				if _spot_ok(p, min_up):
+					p.y = h_at(p.x, p.z)
+					return p
+			rr += 8.0
+	return Vector3.INF
+
+
 func _rescue(msg: String, penalty: bool) -> void:
 	var target := Vector3(spawn.x, spawn_h, spawn.z)
-	var yaw := 0.0
-	while not safe_hist.is_empty():
+	var yaw := atan2(car.global_basis.z.x, car.global_basis.z.z)
+	var near := _find_safe_near(car.global_position)
+	if near != Vector3.INF:
+		target = near
+		safe_hist.clear()
+	while near == Vector3.INF and not safe_hist.is_empty():
 		var idx := maxi(safe_hist.size() - 4, 0)
 		var e: Array = safe_hist[idx]
 		safe_hist.resize(idx)
@@ -1800,8 +1882,10 @@ func _rescue(msg: String, penalty: bool) -> void:
 			target = p
 			yaw = e[1]
 			break
-	target.y = h_at(target.x, target.z) + 1.3
+	target.y = h_at(target.x, target.z) + 1.4
 	car.global_transform = Transform3D(Basis(Vector3.UP, yaw), target)
+	still_ref = target
+	still_timer = 0.0
 	car.linear_velocity = Vector3.ZERO
 	car.angular_velocity = Vector3.ZERO
 	stuck_timer = 0.0
@@ -2799,3 +2883,29 @@ func _update_car_dust(delta: float) -> void:
 		dc = dc.lerp(Color(0.92, 0.94, 0.97), 0.6)
 	(pm as ShaderMaterial).set_shader_parameter("dust_color", dc)
 	(pm as ShaderMaterial).set_shader_parameter("dust", clampf(0.1 + _dust_dist / 1800.0, 0.1, 0.8))
+
+
+
+func _test_rescue() -> void:
+	# نحط السيارة بأوطى نقطة (حفرة) ونجرب الإنقاذ
+	var best := Vector3(spawn.x, 0, spawn.z)
+	var bh := 1e9
+	for i in 400:
+		var x := rng.randf_range(-150, 150)
+		var z := rng.randf_range(-150, 150)
+		var h := h_at(x, z)
+		if has_water and h < water_level + 0.5:
+			continue
+		var avg := (h_at(x + 6, z) + h_at(x - 6, z) + h_at(x, z + 6) + h_at(x, z - 6)) / 4.0
+		if h - avg < bh:
+			bh = h - avg
+			best = Vector3(x, h, z)
+	car.global_transform = Transform3D(Basis(), best + Vector3(0, 1.0, 0))
+	await get_tree().create_timer(1.5).timeout
+	var t0 := Time.get_ticks_msec()
+	var before := car.global_position
+	_rescue("test", false)
+	var after := car.global_position
+	print("RESCUE pit_depth=", snappedf(bh, 0.1), " moved=", snappedf(before.distance_to(after), 0.1), " normal=", snappedf(normal_at(after.x, after.z).y, 0.01), " ms=", Time.get_ticks_msec() - t0)
+	await get_tree().create_timer(2.0).timeout
+	print("AFTER2s moved_since=", snappedf(after.distance_to(car.global_position), 0.1), " flipped=", car.is_flipped())
