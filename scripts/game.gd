@@ -24,9 +24,9 @@ const CARS := [
 	{"id": "buggy", "name": "باگي الرمال", "desc": "خفيفة وسريعة بالتسارع، ملكة الكثبان.",
 		"price": {"coins": 700, "scrap": 60}, "body": "buggy", "drive": "rwd", "paint": Color(1.0, 0.55, 0.1),
 		"speed": 36.0, "accel": 1.3, "grip": 0.74, "offroad": 0.95, "fuel": 70.0, "mass": 750.0},
-	{"id": "sedan", "name": "سيدان المدينة", "desc": "سريعة بالشوارع والإسفلت، ضعيفة بالطين والرمل.",
-		"price": {"coins": 900, "parts": 10}, "body": "sedan", "drive": "rwd", "paint": Color(0.12, 0.3, 0.7),
-		"speed": 44.0, "accel": 1.15, "grip": 0.95, "offroad": 0.4, "fuel": 90.0, "mass": 1150.0},
+	{"id": "sedan", "name": "سيدان فخمة", "desc": "سيدان انسيابية فخمة بخطوط ناعمة — مثل سيارة الفيديو. مجانية ومن البداية.",
+		"price": {}, "body": "sedan", "drive": "rwd", "paint": Color(0.93, 0.92, 0.88),
+		"speed": 42.0, "accel": 1.15, "grip": 0.9, "offroad": 0.7, "fuel": 95.0, "mass": 1350.0},
 	{"id": "jeep", "name": "جيب الجبال", "desc": "دفع رباعي حقيقي، تصعد الجبال وتمشي بالثلج.",
 		"price": {"coins": 1500, "parts": 30}, "body": "jeep", "drive": "awd", "paint": Color(0.3, 0.42, 0.25),
 		"speed": 32.0, "accel": 1.05, "grip": 0.88, "offroad": 1.05, "fuel": 120.0, "mass": 1600.0},
@@ -60,6 +60,7 @@ var data: Dictionary = {}
 var run: Dictionary = {}
 var current_place: int = 0
 var last_result: Dictionary = {}
+var test_car := ""
 var arabic_font: SystemFont
 
 
@@ -115,7 +116,7 @@ func _joy_btn(action: String, b: int) -> void:
 func default_data() -> Dictionary:
 	return {
 		"version": 1, "coins": 250, "scrap": 0, "parts": 0, "crystals": 0, "xp": 0,
-		"owned": ["pickup"], "car": "pickup", "upgrades": {}, "paint": {},
+		"owned": ["pickup", "sedan"], "car": "sedan", "upgrades": {}, "paint": {},
 		"treasures": [], "visits": {}, "trips": 0, "items_total": 0,
 	}
 
@@ -131,6 +132,8 @@ func load_game() -> void:
 					data[k] = parsed[k]
 	for k in RES_ORDER:
 		data[k] = int(data[k])
+	if not data["owned"].has("sedan"):
+		data["owned"].append("sedan")
 	data["xp"] = int(data["xp"])
 
 
@@ -271,6 +274,19 @@ func cost_text(cost: Dictionary) -> String:
 		if cost.has(k):
 			parts.append("%d %s" % [int(cost[k]), RES_NAMES[k]])
 	return " • ".join(parts)
+
+
+## شنو ينقصك حتى تشتري
+func missing_text(cost: Dictionary) -> String:
+	var parts: PackedStringArray = []
+	for k in RES_ORDER:
+		if cost.has(k) and int(data.get(k, 0)) < int(cost[k]):
+			parts.append("%d %s" % [int(cost[k]) - int(data.get(k, 0)), RES_NAMES[k]])
+	return " • ".join(parts)
+
+
+func active_car() -> String:
+	return test_car if test_car != "" else data["car"]
 
 
 func level() -> int:

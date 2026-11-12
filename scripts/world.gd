@@ -47,6 +47,10 @@ var road_rects: Array = []
 var building_rects: Array = []
 var field_rects: Array = []
 var block_size := 64.0
+const TRACK_W := 10.0
+var has_track := false
+var track_base := 110.0
+var track_phase := 0.0
 var road_w := 14.0
 
 # العقد
@@ -134,18 +138,22 @@ func _ready() -> void:
 	if field_rects.size() > 0:
 		_build_fields()
 	_build_props()
+	_build_track_props()
 	_build_garage()
 	_build_bounds()
 	_spawn_items()
 	_build_environment()
 	_build_weather_fx()
 	_build_bursts()
+	_build_fx_pools()
 	_build_tracks()
 	_spawn_birds()
 	_spawn_car()
 	_build_minimap_tex()
 	_update_daylight(0.0)
 	hud.toast("أهلاً بيك في %s" % place["name"], Color(1, 0.86, 0.5), 4.0)
+	if Game.test_car != "":
+		hud.toast("تجربة سيارة: %s" % Game.get_car(Game.test_car)["name"], Color(0.5, 0.9, 1.0), 5.0)
 	hud.toast("اجمع الأغراض وارجع للكراج (المربع الأخضر) حتى تحفظها", Color(0.85, 0.9, 1.0), 6.0)
 
 
@@ -190,6 +198,10 @@ func _layout() -> void:
 			road_rects.append(Rect2(c - road_w / 2.0, -SIZE / 2.0, road_w, SIZE))
 			road_rects.append(Rect2(-SIZE / 2.0, c - road_w / 2.0, SIZE, road_w))
 			k += 1
+	has_track = biome.get("rally", false)
+	if has_track:
+		track_base = rng.randf_range(95.0, 125.0)
+		track_phase = rng.randf() * TAU
 	var nf: int = biome.get("fields", 0)
 	if nf > 0:
 		var tries := 0
@@ -248,6 +260,11 @@ func _raw_h(x: float, z: float, flatten := true) -> float:
 			h = lerpf(h + 1.5, -3.5, dep)
 	if city_density > 0.0:
 		h *= 0.4
+	if has_track:
+		var td := track_dist(x, z)
+		if td < TRACK_W:
+			var smooth_h := (noise_a.get_noise_2d(x * 0.5, z * 0.5) * 0.5 + 0.5) * float(biome["amp"]) * 0.6
+			h = lerpf(smooth_h, h, smoothstep(TRACK_W * 0.4, TRACK_W, td))
 	for f in field_rects:
 		if (f as Rect2).grow(4).has_point(Vector2(x, z)):
 			h *= 0.5
@@ -360,6 +377,12 @@ func _ground_color(x: float, z: float, h: float, slope: float) -> Color:
 			c = c.lerp(Color(0.45, 0.36, 0.25), 0.5)
 	if city_density > 0.0:
 		c = c.lerp(Color(0.62, 0.6, 0.56), 0.55 * city_density)
+	if has_track:
+		var td2 := track_dist(x, z)
+		if td2 < TRACK_W * 0.75:
+			var packed: Color = (biome["high"] as Color).lightened(0.12)
+			var berm := smoothstep(TRACK_W * 0.35, TRACK_W * 0.6, td2)
+			c = c.lerp(packed.lerp(c.darkened(0.08), berm), 0.85)
 	return c
 
 
@@ -554,6 +577,8 @@ func _scatter(kind: String, count: int) -> Array:
 			continue
 		if in_field(x, z, 2.0) and kind != "hay":
 			continue
+		if has_track and not grassy and track_dist(x, z) < TRACK_W:
+			continue
 		var nm := normal_at(x, z)
 		if not grassy and nm.y < 0.8 and kind not in ["rock", "pine", "pine_snow", "dead_tree", "crystals"]:
 			continue
@@ -561,7 +586,7 @@ func _scatter(kind: String, count: int) -> Array:
 		var basis := Basis(Vector3.UP, rng.randf() * TAU)
 		if kind == "rock":
 			basis = basis.scaled(Vector3(s * rng.randf_range(0.8, 2.2), s * rng.randf_range(0.6, 1.6), s * rng.randf_range(0.8, 2.2)))
-		elif kind in ["house", "cabin", "shack", "mudhif", "tent", "wall"]:
+		elif kind in ["house", "cabin", "shack", "mudhif", "tent", "wall", "barn", "crates", "ramp"]:
 			basis = Basis(Vector3.UP, (rng.randi() % 4) * PI / 2.0 + rng.randf_range(-0.2, 0.2))
 		else:
 			basis = basis.scaled(Vector3(s, s, s))
@@ -618,7 +643,16 @@ func _add_collisions(kind: String, xforms: Array, refs: Array = [], extra: Array
 		var t: Transform3D = xforms[k]
 		var sc := t.basis.get_scale()
 		var cs := CollisionShape3D.new()
-		if info[0] == "box":
+		if info[0] == "wedge":
+			var ws: Vector3 = info[1]
+			var cp := ConvexPolygonShape3D.new()
+			var hx := ws.x / 2.0
+			var hz := ws.z / 2.0
+			cp.points = PackedVector3Array([Vector3(-hx, 0, hz), Vector3(hx, 0, hz), Vector3(hx, 0, -hz), Vector3(-hx, 0, -hz),
+				Vector3(-hx, ws.y, -hz), Vector3(hx, ws.y, -hz), Vector3(-hx, -1.0, hz), Vector3(hx, -1.0, hz), Vector3(hx, -1.0, -hz), Vector3(-hx, -1.0, -hz)])
+			cs.shape = cp
+			cs.transform = Transform3D(t.basis.orthonormalized(), t.origin + Vector3(0, 0.2, 0))
+		elif info[0] == "box":
 			var bs := BoxShape3D.new()
 			var sz: Vector3 = info[1]
 			bs.size = sz * sc
@@ -1434,7 +1468,7 @@ func _spawn_birds() -> void:
 
 func _spawn_car() -> void:
 	car = IbraCar.new()
-	car.setup(Game.data["car"], Game.car_paint(Game.data["car"]))
+	car.setup(Game.active_car(), Game.car_paint(Game.active_car()))
 	add_child(car)
 	car.reset_upright(Vector3(spawn.x, spawn_h + 1.2, spawn.z))
 	safe_hist.append([Vector3(spawn.x, spawn_h + 0.5, spawn.z), 0.0])
@@ -1495,6 +1529,8 @@ func surface_update() -> void:
 		g = 0.3
 	if in_field(p.x, p.z):
 		g = 0.65
+	if has_track and track_dist(p.x, p.z) < TRACK_W * 0.5:
+		g = maxf(g, 0.88)
 	g *= lerpf(1.0, 0.82, wet_acc)
 	g *= lerpf(1.0, 0.85, clampf(snow_acc + base_snow * 0.5, 0.0, 1.0))
 	car.surface_grip = g
@@ -1559,6 +1595,7 @@ func _process(delta: float) -> void:
 	_update_debris()
 	tow_confirm = maxf(tow_confirm - delta, 0.0)
 	var cp := car.global_position
+	_update_car_dust(delta)
 	for gm in grass_mats:
 		(gm as ShaderMaterial).set_shader_parameter("car_pos", cp)
 	var follow := cp + Vector3(car.linear_velocity.x, 0, car.linear_velocity.z) * 0.6
@@ -1992,11 +2029,12 @@ const BREAK := {
 	"tree": ["topple", 20.0, 0.75], "tree_big": ["topple", 38.0, 0.55], "pine": ["topple", 20.0, 0.75],
 	"pine_snow": ["topple", 20.0, 0.75], "palm": ["topple", 18.0, 0.8], "acacia": ["topple", 20.0, 0.75],
 	"dead_tree": ["topple", 6.0, 0.92], "pole": ["topple", 10.0, 0.88], "lamp": ["topple", 10.0, 0.88],
-	"house": ["shatter", 30.0, 0.55], "cabin": ["shatter", 28.0, 0.55], "shack": ["shatter", 20.0, 0.65],
+	"house": ["structure", 14.0, 0.6], "cabin": ["structure", 12.0, 0.65], "shack": ["structure", 8.0, 0.75],
 	"tent": ["shatter", 8.0, 0.88], "mudhif": ["shatter", 20.0, 0.65], "snowman": ["shatter", 4.0, 0.95],
 	"crystals": ["shatter", 15.0, 0.8], "wall": ["bricks", 12.0, 0.75],
 	"wreck": ["push", 5.0, 0.8], "hay": ["push", 3.0, 0.9], "tires": ["push", 3.0, 0.92], "log": ["push", 5.0, 0.85],
 	"building": ["dent", 25.0, 0.0],
+	"barn": ["structure", 10.0, 0.7], "crates": ["crates", 3.0, 0.85], "marker": ["topple", 2.0, 0.97],
 }
 const SHATTER_COLORS := {
 	"house": [Color(0.82, 0.72, 0.56), Color(0.7, 0.6, 0.46), Color(0.15, 0.2, 0.25)],
@@ -2008,16 +2046,23 @@ const SHATTER_COLORS := {
 	"crystals": [Color(0.75, 0.35, 1.0), Color(0.9, 0.6, 1.0)],
 	"building": [Color(0.78, 0.72, 0.62), Color(0.6, 0.6, 0.62), Color(0.3, 0.38, 0.45)],
 }
-const MAX_DEBRIS := 240
+const MAX_DEBRIS := 360
 
 var debris: Array = []
 var bursts: Array = []
 var burst_i := 0
 var debris_mats := {}
 var broken_count := 0
+var fx_pools := {}
+var fx_idx := {}
 
 
 func _on_car_hit(_rid: RID, body: Node, body_shape_index: int, _local: int) -> void:
+	if body != null and body.has_meta("structure"):
+		var v0: Vector3 = car.prev_vel
+		if v0.length() * 3.6 >= 8.0:
+			call_deferred("_hit_structure", body.get_meta("structure"), v0)
+		return
 	if props_body == null or body != props_body:
 		return
 	var owner_id := props_body.shape_find_owner(body_shape_index)
@@ -2063,6 +2108,12 @@ func _break_prop(cs: CollisionShape3D, info: Dictionary, v: Vector3, rule: Array
 		"push":
 			_push(info, dir, spd)
 			audio.play("crash", -6.0)
+		"structure":
+			_build_structure(info, dir, spd)
+			audio.play("crash", 0.0)
+		"crates":
+			_crates(info, dir, spd)
+			audio.play("crack", -3.0)
 	for r in info["refs"]:
 		_hide_instance(r)
 	if info.has("light") and is_instance_valid(info["light"]):
@@ -2101,7 +2152,7 @@ func _register_debris(rb: RigidBody3D, life: float) -> void:
 			old.queue_free()
 
 
-func _chunk(size: Vector3, col: Color, pos: Vector3, mass_kg: float, rot := Basis(), life := 14.0) -> RigidBody3D:
+func _chunk(size: Vector3, col: Color, pos: Vector3, mass_kg: float, rot := Basis(), life := 60.0) -> RigidBody3D:
 	var rb := RigidBody3D.new()
 	rb.collision_layer = 2
 	rb.collision_mask = 3
@@ -2134,31 +2185,89 @@ func _prop_meshes_into(rb: Node3D, info: Dictionary, sc: Vector3) -> void:
 		rb.add_child(mi)
 
 
-## شجرة أو عمود: تطيح باتجاه السيارة
+## شجرة أو عمود: تنكسر من الجذع ويبقى الكعب، وتطيح بهدوء باتجاه السيارة
 func _topple(info: Dictionary, dir: Vector3, spd: float) -> void:
 	var kind: String = info["kind"]
 	var t: Transform3D = info["xf"]
 	var sc := t.basis.get_scale()
 	var d: Vector2 = PropLib.SOLID[kind][1]
 	var h := d.y * sc.y
+	var rad := maxf(d.x * sc.x, 0.12)
+	var is_tree := kind not in ["pole", "lamp"]
+	var cut := 0.55 if is_tree else 0.35
+	# الكعب اللي يبقى بالأرض
+	var stump := Node3D.new()
+	stump.position = t.origin
+	add_child(stump)
+	var wood := Color(0.36, 0.25, 0.16) if is_tree else Color(0.3, 0.28, 0.27)
+	var sm := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = rad * 0.95
+	cm.bottom_radius = rad * 1.2
+	cm.height = cut
+	cm.radial_segments = 8
+	sm.mesh = cm
+	sm.material_override = _debris_mat(wood)
+	sm.position.y = cut * 0.5
+	stump.add_child(sm)
+	for j in 4:
+		var sp := MeshInstance3D.new()
+		var sp_m := CylinderMesh.new()
+		sp_m.top_radius = 0.0
+		sp_m.bottom_radius = rad * 0.35
+		sp_m.height = rng.randf_range(0.15, 0.4)
+		sp_m.radial_segments = 4
+		sp.mesh = sp_m
+		sp.material_override = _debris_mat(Color(0.75, 0.62, 0.45) if is_tree else wood)
+		var a := TAU * j / 4.0 + rng.randf()
+		sp.position = Vector3(cos(a) * rad * 0.5, cut + sp_m.height * 0.4, sin(a) * rad * 0.5)
+		stump.add_child(sp)
+	# الجزء اللي يطيح
 	var rb := RigidBody3D.new()
 	rb.collision_layer = 2
 	rb.collision_mask = 3
-	rb.mass = 160.0 if kind in ["pole", "lamp", "dead_tree"] else 380.0
-	rb.transform = Transform3D(t.basis.orthonormalized(), t.origin + Vector3(0, 0.3, 0))
+	rb.mass = 140.0 if not is_tree or kind == "dead_tree" else 420.0
+	rb.angular_damp = 0.4
+	var pm := PhysicsMaterial.new()
+	pm.friction = 1.0
+	pm.bounce = 0.05
+	rb.physics_material_override = pm
+	rb.transform = Transform3D(t.basis.orthonormalized(), t.origin + Vector3(0, cut * 0.15, 0))
 	_prop_meshes_into(rb, info, sc)
 	var cs := CollisionShape3D.new()
 	var cyl := CylinderShape3D.new()
-	cyl.radius = maxf(d.x * sc.x, 0.15)
-	cyl.height = h
+	cyl.radius = rad
+	cyl.height = h - cut
 	cs.shape = cyl
-	cs.position = Vector3(0, h * 0.5, 0)
+	cs.position = Vector3(0, cut + (h - cut) * 0.5, 0)
 	rb.add_child(cs)
+	if is_tree and kind != "dead_tree":
+		var crown := CollisionShape3D.new()
+		var cb := BoxShape3D.new()
+		cb.size = Vector3(2.2, 1.8, 2.2) * sc
+		crown.shape = cb
+		crown.position = Vector3(0, h * 0.72, 0)
+		rb.add_child(crown)
 	rb.center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
-	rb.center_of_mass = Vector3(0, h * 0.45, 0)
+	rb.center_of_mass = Vector3(0, h * 0.55, 0)
 	add_child(rb)
-	rb.apply_impulse(dir * rb.mass * clampf(spd * 0.25, 2.5, 9.0), Vector3(0, h * 0.8, 0))
-	_register_debris(rb, 50.0)
+	# يبدي يميل باتجاه الضربة والجاذبية تكمل الطيحة
+	var axis := Vector3.UP.cross(dir).normalized()
+	rb.angular_velocity = axis * clampf(spd * 0.06, 0.45, 1.3)
+	rb.linear_velocity = dir * minf(spd * 0.12, 2.0)
+	_register_debris(rb, 60.0)
+	var top := t.origin + Vector3(0, h * 0.75, 0)
+	if is_tree:
+		_leaves(top, info, 1.0)
+		_splinters(t.origin + Vector3(0, cut, 0), Color(0.6, 0.48, 0.32))
+		get_tree().create_timer(1.6).timeout.connect(func():
+			if is_instance_valid(rb):
+				_burst(rb.global_position + rb.global_basis.y * h * 0.6)
+				_leaves(rb.global_position + rb.global_basis.y * h * 0.7, info, 0.7))
+	else:
+		_splinters(t.origin + Vector3(0, cut, 0), wood)
+		if kind == "lamp":
+			_sparks(t.origin + Vector3(0, 5.6, 0))
 
 
 ## بيت أو كوخ أو خيمة: يتفلش لقطع
@@ -2384,3 +2493,309 @@ func _update_debris() -> void:
 			var tw := create_tween()
 			tw.tween_property(rb, "position:y", rb.position.y - 3.0, 2.5)
 			tw.tween_callback(rb.queue_free)
+
+
+
+# ---------------------------------------------------------------- هدم البيوت قطعة قطعة
+## البيت يتحول لقطع ثابتة؛ اللي قريبة من الضربة تنكسر وتطيح، والسقف يوكع إذا انكسرت حيطان كافية
+func _build_structure(info: Dictionary, dir: Vector3, spd: float) -> void:
+	var kind: String = info["kind"]
+	var t: Transform3D = info["xf"]
+	var rot := t.basis.orthonormalized()
+	var body := StaticBody3D.new()
+	add_child(body)
+	var rec := {"body": body, "pieces": [], "walls": 0, "gone": 0, "roof_down": false, "porch_down": false, "kind": kind}
+	body.set_meta("structure", rec)
+	for pc in PropLib.structure(kind):
+		var xf := Transform3D(rot * Basis.from_euler(pc["rot"]), t.origin + rot * (pc["pos"] as Vector3))
+		var mi := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = pc["size"]
+		mi.mesh = bm
+		mi.material_override = _debris_mat(pc["col"])
+		mi.transform = xf
+		add_child(mi)
+		var cs := CollisionShape3D.new()
+		var bs := BoxShape3D.new()
+		bs.size = pc["size"]
+		cs.shape = bs
+		cs.transform = xf
+		body.add_child(cs)
+		var entry := {"mi": mi, "cs": cs, "xf": xf, "size": pc["size"], "col": pc["col"], "type": pc["type"], "mass": pc["mass"], "alive": true}
+		rec["pieces"].append(entry)
+		if pc["type"] == "wall":
+			rec["walls"] += 1
+	_hit_structure(rec, dir * spd)
+
+
+func _hit_structure(rec: Dictionary, v: Vector3) -> void:
+	if not is_instance_valid(rec["body"]):
+		return
+	var spd := v.length()
+	var dir := Vector3(v.x, 0, v.z)
+	dir = dir.normalized() if dir.length() > 0.1 else -car.global_basis.z
+	var impact := car.global_position + dir * 2.2 + Vector3(0, 0.6, 0)
+	var radius := 1.3 + spd * 0.075
+	var broke := 0
+	var wood: bool = rec["kind"] != "house"
+	for e in rec["pieces"]:
+		if not e["alive"] or e["type"] == "roof" or e["type"] == "porch_roof":
+			continue
+		var p: Vector3 = (e["xf"] as Transform3D).origin
+		var dd := Vector3(p.x - impact.x, (p.y - impact.y) * 0.6, p.z - impact.z).length()
+		if dd > radius:
+			continue
+		var f := 1.0 - dd / radius
+		var rb := _free_piece(rec, e)
+		rb.apply_central_impulse((dir * spd * (0.35 + 0.5 * f) + Vector3(rng.randf_range(-1, 1), 1.2 * f, rng.randf_range(-1, 1))) * rb.mass)
+		rb.apply_torque_impulse(Vector3(rng.randf_range(-1, 1), rng.randf_range(-0.5, 0.5), rng.randf_range(-1, 1)) * rb.mass * 0.8)
+		broke += 1
+	if broke == 0:
+		return
+	audio.play("crack" if wood else "crash", -2.0)
+	_burst(impact)
+	_burst(impact + dir * 1.5 + Vector3(0, 1.0, 0))
+	_splinters(impact, Color(0.62, 0.48, 0.32) if wood else Color(0.8, 0.72, 0.58))
+	_check_collapse(rec)
+
+
+func _free_piece(rec: Dictionary, e: Dictionary) -> RigidBody3D:
+	e["alive"] = false
+	(e["mi"] as Node).queue_free()
+	(e["cs"] as Node).queue_free()
+	if e["type"] == "wall":
+		rec["gone"] += 1
+	if e["type"] == "post":
+		rec["porch_down"] = true
+	var xf: Transform3D = e["xf"]
+	var size: Vector3 = e["size"]
+	# الألواح الطويلة تنكسر لقطعتين أو ثلاث
+	if e["type"] == "wall" and size.y > 1.6:
+		var n := 3 if size.y > 2.6 else 2
+		var seg := size.y / n
+		var first: RigidBody3D = null
+		for k in n:
+			var off := Vector3(0, -size.y / 2.0 + seg * (k + 0.5), 0)
+			var sz := Vector3(size.x, seg * rng.randf_range(0.8, 0.97), size.z)
+			var b := xf.basis * Basis.from_euler(Vector3(rng.randf_range(-0.1, 0.1), 0, rng.randf_range(-0.12, 0.12)))
+			var rb := _chunk(sz, e["col"], xf.origin + xf.basis * off, e["mass"] / n, b, 150.0)
+			if first == null:
+				first = rb
+			else:
+				rb.apply_central_impulse(Vector3(rng.randf_range(-1, 1), 0.5, rng.randf_range(-1, 1)) * rb.mass * 1.5)
+		return first
+	return _chunk(size, e["col"], xf.origin, e["mass"], xf.basis, 150.0)
+
+
+func _check_collapse(rec: Dictionary) -> void:
+	var walls: int = rec["walls"]
+	var ratio := float(rec["gone"]) / maxf(walls, 1.0)
+	if rec["porch_down"]:
+		for e in rec["pieces"]:
+			if e["alive"] and e["type"] == "porch_roof":
+				_free_piece(rec, e)
+	if not rec["roof_down"] and ratio > 0.22:
+		rec["roof_down"] = true
+		get_tree().create_timer(0.35).timeout.connect(func(): _collapse_roof(rec))
+
+
+func _collapse_roof(rec: Dictionary) -> void:
+	if not is_instance_valid(rec["body"]):
+		return
+	var center := Vector3.ZERO
+	var n := 0
+	for e in rec["pieces"]:
+		if e["alive"] and e["type"] == "roof":
+			var rb := _free_piece(rec, e)
+			rb.apply_torque_impulse(Vector3(rng.randf_range(-1, 1), 0, rng.randf_range(-1, 1)) * rb.mass * 0.6)
+			center += rb.global_position
+			n += 1
+	# حيطان فوك (الصف العلوي) توكع ويه السقف
+	for e in rec["pieces"]:
+		if e["alive"] and e["type"] == "wall" and rng.randf() < 0.35:
+			var rb2 := _free_piece(rec, e)
+			rb2.apply_central_impulse(Vector3(rng.randf_range(-1, 1), 0, rng.randf_range(-1, 1)) * rb2.mass * 1.5)
+	if n > 0:
+		center /= n
+		audio.play("crash", 2.0)
+		get_tree().create_timer(0.9).timeout.connect(func():
+			_burst(center + Vector3(0, -2.0, 0))
+			_burst(center + Vector3(1.5, -2.5, 1.0))
+			_burst(center + Vector3(-1.5, -2.5, -1.0)))
+
+
+# ---------------------------------------------------------------- جزيئات: ورق، شظايا، شرار
+func _build_fx_pools() -> void:
+	for kind2 in ["leaves", "splinters", "sparks"]:
+		var arr: Array = []
+		for i in 3:
+			var pm := ParticleProcessMaterial.new()
+			pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+			pm.direction = Vector3(0, 1, 0)
+			pm.spread = 180.0
+			var q := QuadMesh.new()
+			var amount := 60
+			var life := 3.0
+			match kind2:
+				"leaves":
+					pm.emission_sphere_radius = 2.0
+					pm.initial_velocity_min = 1.0
+					pm.initial_velocity_max = 4.0
+					pm.gravity = Vector3(0.3, -1.2, 0.2)
+					pm.damping_min = 0.8
+					pm.damping_max = 1.6
+					pm.angular_velocity_min = -300
+					pm.angular_velocity_max = 300
+					pm.turbulence_enabled = true
+					pm.turbulence_noise_strength = 2.0
+					q.size = Vector2(0.22, 0.15)
+					q.material = _particle_mat(Color(1, 1, 1, 1), null, BaseMaterial3D.BILLBOARD_PARTICLES)
+					amount = 90
+					life = 4.0
+				"splinters":
+					pm.emission_sphere_radius = 0.6
+					pm.initial_velocity_min = 3.0
+					pm.initial_velocity_max = 8.0
+					pm.gravity = Vector3(0, -9.8, 0)
+					pm.angular_velocity_min = -600
+					pm.angular_velocity_max = 600
+					pm.scale_min = 0.5
+					pm.scale_max = 1.4
+					q.size = Vector2(0.06, 0.3)
+					q.material = _particle_mat(Color(1, 1, 1, 1), null, BaseMaterial3D.BILLBOARD_PARTICLES)
+					amount = 50
+					life = 1.8
+				"sparks":
+					pm.emission_sphere_radius = 0.2
+					pm.initial_velocity_min = 3.0
+					pm.initial_velocity_max = 7.0
+					pm.gravity = Vector3(0, -9.8, 0)
+					q.size = Vector2(0.06, 0.06)
+					var sm := _particle_mat(Color(1, 0.8, 0.3, 1), null, BaseMaterial3D.BILLBOARD_PARTICLES, true)
+					sm.emission_enabled = true
+					sm.emission = Color(1, 0.7, 0.2)
+					sm.emission_energy_multiplier = 6.0
+					q.material = sm
+					amount = 40
+					life = 1.0
+			var p := _make_particles(amount, life, q, pm)
+			p.one_shot = true
+			p.explosiveness = 0.9
+			p.emitting = false
+			p.amount_ratio = 1.0
+			arr.append(p)
+		fx_pools[kind2] = arr
+
+
+func _emit(kind2: String, pos: Vector3, col: Color) -> void:
+	if not fx_pools.has(kind2):
+		return
+	var arr: Array = fx_pools[kind2]
+	var i: int = fx_idx.get(kind2, 0)
+	fx_idx[kind2] = i + 1
+	var p: GPUParticles3D = arr[i % arr.size()]
+	(p.process_material as ParticleProcessMaterial).color = col
+	p.global_position = pos
+	p.restart()
+	p.emitting = true
+
+
+func _leaves(pos: Vector3, info: Dictionary, _amt: float) -> void:
+	var col := Color(0.35, 0.5, 0.2)
+	if not info["refs"].is_empty() and info["refs"][0] != null:
+		var cols := _foliage_colors()
+		col = cols[rng.randi() % cols.size()]
+	if info["kind"] == "pine_snow" or base_snow > 0.3:
+		col = Color(0.95, 0.97, 1.0)
+	_emit("leaves", pos, col)
+
+
+func _splinters(pos: Vector3, col: Color) -> void:
+	_emit("splinters", pos, col)
+
+
+func _sparks(pos: Vector3) -> void:
+	_emit("sparks", pos, Color(1, 0.8, 0.3))
+
+
+
+## صناديق: كل صندوق يطير لحاله
+func _crates(info: Dictionary, dir: Vector3, spd: float) -> void:
+	var t: Transform3D = info["xf"]
+	var rot := t.basis.orthonormalized()
+	var k := 0
+	for cr in PropLib.crate_layout():
+		var col := Color(0.62, 0.45, 0.26).darkened(0.06 * (k % 3))
+		if k == 6:
+			col = Color(0.15, 0.35, 0.55)
+		var rb := _chunk(cr[1], col, t.origin + rot * ((cr[0] as Vector3) + Vector3(0, 0.27, 0)), 25.0, rot, 120.0)
+		rb.apply_central_impulse((dir * spd * rng.randf_range(0.3, 0.7) + Vector3(rng.randf_range(-1.5, 1.5), rng.randf_range(1.0, 3.0), rng.randf_range(-1.5, 1.5))) * rb.mass)
+		rb.apply_torque_impulse(Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)) * rb.mass)
+		k += 1
+	_splinters(t.origin + Vector3(0, 0.8, 0), Color(0.62, 0.45, 0.26))
+
+
+# ---------------------------------------------------------------- مسار الرالي
+func _track_r(a: float) -> float:
+	return track_base + 28.0 * sin(2.0 * a + track_phase) + 14.0 * sin(3.0 * a + track_phase * 1.7)
+
+
+func track_dist(x: float, z: float) -> float:
+	if not has_track:
+		return 1e9
+	var a := atan2(z, x)
+	return absf(Vector2(x, z).length() - _track_r(a))
+
+
+func _build_track_props() -> void:
+	if not has_track:
+		return
+	var markers: Array = []
+	var ramps: Array = []
+	var n := 150
+	for i in n:
+		var a := TAU * i / n
+		var r := _track_r(a)
+		var c := Vector2(cos(a), sin(a)) * r
+		var a2 := TAU * (i + 1) / n
+		var c2 := Vector2(cos(a2), sin(a2)) * _track_r(a2)
+		var tang := (c2 - c).normalized()
+		var nrm := Vector2(-tang.y, tang.x)
+		if i % 2 == 0:
+			for sgn in [-1.0, 1.0]:
+				var p: Vector2 = c + nrm * (TRACK_W * 0.5 + 0.8) * sgn
+				if is_underwater(p.x, p.y, 0.3):
+					continue
+				markers.append(Transform3D(Basis(), Vector3(p.x, h_at(p.x, p.y) - 0.1, p.y)))
+		if i % 37 == 18:
+			var yaw := atan2(-tang.x, -tang.y)
+			if not is_underwater(c.x, c.y, 0.5) and normal_at(c.x, c.y).y > 0.9:
+				ramps.append(Transform3D(Basis(Vector3.UP, yaw), Vector3(c.x, h_at(c.x, c.y) - 0.15, c.y)))
+	var mr := _add_multimesh(PropLib.build("marker", {}), _prop_material(false, "marker"), markers, 230.0)
+	_add_collisions("marker", markers, mr)
+	var rr := _add_multimesh(PropLib.build("ramp", {}), _prop_material(false, "ramp"), ramps, 0.0)
+	_add_collisions("ramp", ramps, rr)
+
+
+
+var _dust_dist := 0.0
+
+
+## السيارة تتوسخ بغبار المكان كلما تسوق أكثر، والمطر يغسلها
+func _update_car_dust(delta: float) -> void:
+	var pm = car.model.get("paint_mat")
+	if pm == null:
+		return
+	var spd := Vector2(car.linear_velocity.x, car.linear_velocity.z).length()
+	var on_dust: float = biome["dusty"]
+	if city_density > 0.0 and on_road(car.global_position.x, car.global_position.z):
+		on_dust = 0.05
+	_dust_dist += spd * delta * on_dust
+	_dust_dist = maxf(_dust_dist - delta * 25.0 * float(wcur.get("rain", 0.0)), 0.0)
+	if car.water_depth > 0.0:
+		_dust_dist = maxf(_dust_dist - delta * 120.0, 0.0)
+	var dc: Color = biome["dust"]
+	if base_snow > 0.3:
+		dc = dc.lerp(Color(0.92, 0.94, 0.97), 0.6)
+	(pm as ShaderMaterial).set_shader_parameter("dust_color", dc)
+	(pm as ShaderMaterial).set_shader_parameter("dust", clampf(0.1 + _dust_dist / 1800.0, 0.1, 0.8))

@@ -16,11 +16,14 @@ var name_label: Label
 var desc_label: Label
 var stats_box: VBoxContainer
 var action_btn: Button
+var test_btn: Button
+var need_label: Label
 var tabs: TabContainer
 var popup: Control
 
 
 func _ready() -> void:
+	Game.test_car = ""
 	preview_id = Game.data["car"]
 	_build_room()
 	_build_ui()
@@ -295,13 +298,22 @@ func _build_ui() -> void:
 	iv.add_child(desc_label)
 	stats_box = VBoxContainer.new()
 	iv.add_child(stats_box)
+	need_label = _label("", 15, Color(1, 0.55, 0.45))
+	need_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	iv.add_child(need_label)
 	var bh := HBoxContainer.new()
 	bh.add_theme_constant_override("separation", 10)
 	iv.add_child(bh)
 	action_btn = _button("", Color(0.2, 0.55, 0.3), 20)
-	action_btn.custom_minimum_size = Vector2(200, 50)
+	action_btn.custom_minimum_size = Vector2(150, 50)
 	action_btn.pressed.connect(_on_action)
 	bh.add_child(action_btn)
+	test_btn = _button("جرّبها برحلة", Color(0.2, 0.45, 0.75), 18)
+	test_btn.custom_minimum_size = Vector2(150, 50)
+	test_btn.pressed.connect(func():
+		Game.test_car = preview_id
+		Game.goto("map"))
+	bh.add_child(test_btn)
 	var go := _button("انطلق للخريطة  ◀", Color(0.9, 0.5, 0.1), 22)
 	go.custom_minimum_size = Vector2(240, 50)
 	go.pressed.connect(func(): Game.goto("map"))
@@ -396,6 +408,8 @@ func _refresh_info() -> void:
 	_stat_row("الطرق الوعرة", s["offroad"], 1.6, Color(0.6, 0.9, 0.3))
 	_stat_row("الوقود", s["fuel"], 450.0, Color(1, 0.4, 0.3))
 	_stat_row("النيترو", s["nitro"], 8.0, Color(0.3, 0.6, 1))
+	need_label.text = ""
+	test_btn.visible = not Game.owns(preview_id)
 	if preview_id == Game.data["car"]:
 		action_btn.text = "✓ هاي سيارتك"
 		action_btn.disabled = true
@@ -404,7 +418,12 @@ func _refresh_info() -> void:
 		action_btn.disabled = false
 	else:
 		action_btn.text = "اشتريها"
-		action_btn.disabled = not Game.can_afford(car["price"])
+		var ok := Game.can_afford(car["price"])
+		action_btn.disabled = not ok
+		if ok:
+			need_label.text = "السعر: " + Game.cost_text(car["price"])
+		else:
+			need_label.text = "مقفولة — ينقصك: %s\nاجمع غنائم من الرحلات، أو جرّبها برحلة هسه." % Game.missing_text(car["price"])
 
 
 func _on_action() -> void:

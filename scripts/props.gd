@@ -16,6 +16,8 @@ const SOLID := {
 	"hay": ["box", Vector3(1.6, 1.6, 1.6)], "tires": ["cyl", Vector2(0.5, 1.0)],
 	"log": ["box", Vector3(0.7, 0.6, 5.0)], "lamp": ["cyl", Vector2(0.12, 6.0)],
 	"wall": ["box", Vector3(6.0, 1.8, 0.35)],
+	"barn": ["box", Vector3(7.2, 3.6, 6.2)], "crates": ["box", Vector3(2.6, 1.9, 1.7)],
+	"marker": ["cyl", Vector2(0.09, 1.3)], "ramp": ["wedge", Vector3(4.0, 1.4, 6.0)],
 }
 
 # الأشياء الصغيرة (عشب) بدون تصادم، تستخدم شيدر الهوا
@@ -116,6 +118,97 @@ static func wall_bricks() -> Array:
 			out.append([Vector3(x + w * 0.5, y, 0), Vector3(w, 0.45, 0.35)])
 			x += w
 			w = 0.75
+	return out
+
+
+## صناديق مكدسة: [مكان, حجم]
+static func crate_layout() -> Array:
+	return [[Vector3(-0.66, 0.31, 0), Vector3(0.62, 0.62, 0.62)], [Vector3(0.0, 0.31, 0.05), Vector3(0.62, 0.62, 0.62)],
+		[Vector3(0.66, 0.31, -0.05), Vector3(0.62, 0.62, 0.62)], [Vector3(-0.33, 0.93, 0), Vector3(0.62, 0.62, 0.62)],
+		[Vector3(0.33, 0.93, 0.03), Vector3(0.62, 0.62, 0.62)], [Vector3(0.0, 1.55, 0), Vector3(0.62, 0.62, 0.62)],
+		[Vector3(0.9, 0.42, 0.75), Vector3(0.5, 0.84, 0.5)]]
+
+
+## قطع البناء للبيوت حتى تنهدم بشكل واقعي.
+## كل قطعة: {"size", "pos", "rot" (Vector3), "col", "type": wall/roof/post/porch_roof, "mass"}
+static func structure(kind: String) -> Array:
+	var out: Array = []
+	match kind:
+		"house":
+			var wall := Color(0.82, 0.72, 0.56)
+			# حيطان طابوق/لبن: مربعات 1×1.07
+			for face in 4:
+				var along_x := face < 2
+				var length := 6.0 if along_x else 5.0
+				var n := int(length)
+				for i in n:
+					for row in 3:
+						var u := -length / 2.0 + (i + 0.5) * length / n
+						var y := 0.53 + row * 1.07
+						var pos := Vector3(u, y, -2.5 if face == 0 else 2.5) if along_x else Vector3(-3.0 if face == 2 else 3.0, y, u)
+						var size := Vector3(length / n, 1.06, 0.26) if along_x else Vector3(0.26, 1.06, length / n)
+						var c := wall
+						if face == 0 and i == 3 and row < 2:
+							c = Color(0.32, 0.22, 0.15)
+						elif (i + row) % 3 == 1 and row == 1:
+							c = Color(0.18, 0.22, 0.26)
+						var shade := 0.94 + float((i * 5 + row * 3 + face) % 4) * 0.025
+						out.append({"size": size, "pos": pos, "rot": Vector3.ZERO, "col": Color(c.r * shade, c.g * shade, c.b * shade), "type": "wall", "mass": 70.0})
+			for i in 2:
+				for j in 2:
+					out.append({"size": Vector3(3.1, 0.32, 2.6), "pos": Vector3(-1.55 + i * 3.1, 3.36, -1.3 + j * 2.6), "rot": Vector3.ZERO,
+						"col": wall.darkened(0.1), "type": "roof", "mass": 220.0})
+		"barn":
+			var red := Color(0.58, 0.16, 0.12)
+			for face in 4:
+				var along_x := face < 2
+				var length := 7.0 if along_x else 6.0
+				var n := int(round(length / 0.7))
+				for i in n:
+					var u := -length / 2.0 + (i + 0.5) * length / n
+					var pos := Vector3(u, 1.75, -3.0 if face == 0 else 3.0) if along_x else Vector3(-3.5 if face == 2 else 3.5, 1.75, u)
+					var size := Vector3(length / n - 0.02, 3.5, 0.12) if along_x else Vector3(0.12, 3.5, length / n - 0.02)
+					var shade := 0.85 + float((i * 7 + face * 3) % 5) * 0.05
+					var c := Color(red.r * shade, red.g * shade, red.b * shade)
+					if face == 0 and absi(i - n / 2) <= 1:
+						c = Color(0.85, 0.82, 0.75) if i == n / 2 else c.darkened(0.3)
+					out.append({"size": size, "pos": pos, "rot": Vector3.ZERO, "col": c, "type": "wall", "mass": 22.0})
+			for sgn in [-1.0, 1.0]:
+				for i in 2:
+					out.append({"size": Vector3(3.8, 0.12, 3.5), "pos": Vector3(-1.85 + i * 3.7, 4.35, 1.5 * sgn), "rot": Vector3(-0.5 * sgn, 0, 0),
+						"col": Color(0.55, 0.56, 0.58), "type": "roof", "mass": 110.0})
+		"cabin", "shack":
+			var wood := Color(0.45, 0.3, 0.18) if kind == "cabin" else Color(0.55, 0.43, 0.32)
+			var w := 5.0 if kind == "cabin" else 4.0
+			var d := 4.0 if kind == "cabin" else 3.4
+			var h := 2.6 if kind == "cabin" else 2.8
+			for face in 4:
+				var along_x := face < 2
+				var length := w if along_x else d
+				var n := int(round(length / 0.5))
+				for i in n:
+					var u := -length / 2.0 + (i + 0.5) * length / n
+					var pos := Vector3(u, h / 2.0, -d / 2.0 if face == 0 else d / 2.0) if along_x else Vector3(-w / 2.0 if face == 2 else w / 2.0, h / 2.0, u)
+					var size := Vector3(length / n - 0.02, h, 0.1) if along_x else Vector3(0.1, h, length / n - 0.02)
+					var shade := 0.88 + float((i * 7 + face * 3) % 5) * 0.04
+					out.append({"size": size, "pos": pos, "rot": Vector3.ZERO, "col": Color(wood.r * shade, wood.g * shade, wood.b * shade), "type": "wall", "mass": 18.0})
+			if kind == "cabin":
+				for sgn in [-1.0, 1.0]:
+					out.append({"size": Vector3(5.6, 0.14, 2.75), "pos": Vector3(0, 3.45, 1.12 * sgn), "rot": Vector3(-0.55 * sgn, 0, 0),
+						"col": Color(0.3, 0.2, 0.15), "type": "roof", "mass": 160.0})
+			else:
+				for i in 2:
+					out.append({"size": Vector3(2.3, 0.12, 4.2), "pos": Vector3(-1.15 + i * 2.3, 3.0, 0.2), "rot": Vector3(0.12, 0, 0),
+						"col": Color(0.5, 0.48, 0.45), "type": "roof", "mass": 60.0})
+				# شرفة: أرضية ألواح + أعمدة + سقف
+				for i in 5:
+					out.append({"size": Vector3(0.78, 0.12, 1.6), "pos": Vector3(-1.6 + i * 0.8, 0.3, -2.5), "rot": Vector3.ZERO,
+						"col": wood.darkened(0.15 + 0.05 * (i % 2)), "type": "wall", "mass": 12.0})
+				for x in [-1.9, 1.9]:
+					out.append({"size": Vector3(0.14, 2.5, 0.14), "pos": Vector3(x, 1.45, -3.25), "rot": Vector3.ZERO,
+						"col": wood.darkened(0.2), "type": "post", "mass": 15.0})
+				out.append({"size": Vector3(4.4, 0.1, 1.9), "pos": Vector3(0, 2.75, -2.55), "rot": Vector3(0.1, 0, 0),
+					"col": Color(0.5, 0.48, 0.45), "type": "porch_roof", "mass": 50.0})
 	return out
 
 
@@ -297,6 +390,58 @@ static func build(kind: String, p: Dictionary) -> ArrayMesh:
 				var shade := 0.9 + float((bi * 7) % 5) * 0.035
 				_box(st, br[1] - Vector3(0.03, 0.03, 0.0), br[0], Color(bc.r * shade, bc.g * shade, bc.b * shade))
 				bi += 1
+		"barn":
+			var red := Color(0.58, 0.16, 0.12)
+			_box(st, Vector3(7.0, 3.5, 6.0), Vector3(0, 1.75, 0), red)
+			var cen := Vector3(0, 3.5, 0)
+			var a := Vector3(-3.6, 3.45, -3.2)
+			var b := Vector3(3.6, 3.45, -3.2)
+			var c := Vector3(3.6, 3.45, 3.2)
+			var d := Vector3(-3.6, 3.45, 3.2)
+			var r1 := Vector3(-3.6, 5.2, 0)
+			var r2 := Vector3(3.6, 5.2, 0)
+			var roof := Color(0.55, 0.56, 0.58)
+			_tri(st, a, b, r2, roof, cen)
+			_tri(st, a, r2, r1, roof, cen)
+			_tri(st, d, c, r2, roof.darkened(0.08), cen)
+			_tri(st, d, r2, r1, roof.darkened(0.08), cen)
+			_tri(st, a, d, r1, red.darkened(0.15), cen)
+			_tri(st, b, c, r2, red.darkened(0.15), cen)
+			_box(st, Vector3(2.2, 2.8, 0.06), Vector3(0, 1.4, -3.02), red.darkened(0.3))
+			_box(st, Vector3(0.12, 2.8, 0.08), Vector3(0, 1.4, -3.05), Color(0.85, 0.82, 0.75))
+			_box(st, Vector3(7.1, 0.12, 6.1), Vector3(0, 0.06, 0), Color(0.35, 0.3, 0.26))
+		"crates":
+			var cw := Color(0.62, 0.45, 0.26)
+			var k := 0
+			for cr in crate_layout():
+				var col := cw.darkened(0.06 * (k % 3))
+				if k == 6:
+					col = Color(0.15, 0.35, 0.55)
+				_box(st, cr[1], cr[0], col)
+				_box(st, (cr[1] as Vector3) * Vector3(1.02, 0.12, 1.02), (cr[0] as Vector3) + Vector3(0, (cr[1] as Vector3).y * 0.3, 0), col.darkened(0.3))
+				k += 1
+		"marker":
+			_cyl(st, 0.07, 0.09, 1.2, Vector3(0, 0.6, 0), Color(0.95, 0.95, 0.92), Vector3.ZERO, 6)
+			_cyl(st, 0.075, 0.075, 0.25, Vector3(0, 1.1, 0), Color(0.85, 0.15, 0.1), Vector3.ZERO, 6)
+		"ramp":
+			var wood2 := Color(0.5, 0.38, 0.25)
+			var cc := Vector3(0, 0.3, 0)
+			var p0 := Vector3(-2, 0, 3)
+			var p1 := Vector3(2, 0, 3)
+			var p2 := Vector3(2, 0, -3)
+			var p3 := Vector3(-2, 0, -3)
+			var t0 := Vector3(-2, 1.4, -3)
+			var t1 := Vector3(2, 1.4, -3)
+			_tri(st, p0, p1, t1, wood2, cc)
+			_tri(st, p0, t1, t0, wood2, cc)
+			_tri(st, p3, p2, t1, wood2.darkened(0.25), cc)
+			_tri(st, p3, t1, t0, wood2.darkened(0.25), cc)
+			_tri(st, p0, p3, t0, wood2.darkened(0.15), cc)
+			_tri(st, p1, p2, t1, wood2.darkened(0.15), cc)
+			for i in 8:
+				var z := 3.0 - (i + 0.5) * 0.75
+				var y := 1.4 * (3.0 - z) / 6.0
+				_box(st, Vector3(4.02, 0.04, 0.05), Vector3(0, y + 0.02, z), wood2.darkened(0.3), Vector3(0.23, 0, 0))
 		"lamp":
 			_cyl(st, 0.08, 0.12, 6.0, Vector3(0, 3.0, 0), Color(0.25, 0.27, 0.3), Vector3.ZERO, 6)
 			_box(st, Vector3(0.1, 0.1, 1.6), Vector3(0, 5.9, -0.7), Color(0.25, 0.27, 0.3))

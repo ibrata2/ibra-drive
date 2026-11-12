@@ -27,6 +27,9 @@ func _ready() -> void:
 			Game.run = {"coins": 120, "scrap": 30, "parts": 5, "crystals": 1, "xp": 80, "items": 9, "treasure": true}
 			Game.end_trip(1.0, "garage")
 			return
+		if a == "--carshow":
+			_carshow()
+			return
 		if a == "--map":
 			_on_scene_requested("map", null)
 			return
@@ -125,3 +128,66 @@ func _hide_loading() -> void:
 		tw.parallel().tween_property(loading.get_child(1), "modulate:a", 0.0, 0.4)
 		tw.tween_callback(loading.queue_free)
 		loading = null
+
+
+func _carshow() -> void:
+	var n := Node3D.new()
+	add_child(n)
+	var we := WorldEnvironment.new()
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.55, 0.62, 0.7)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.6, 0.65, 0.75)
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	we.environment = env
+	n.add_child(we)
+	var sun := DirectionalLight3D.new()
+	sun.rotation = Vector3(-0.9, 0.7, 0)
+	sun.shadow_enabled = true
+	n.add_child(sun)
+	var fl := MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(80, 40)
+	fl.mesh = pm
+	var fm := StandardMaterial3D.new()
+	fm.albedo_color = Color(0.85, 0.72, 0.5)
+	fl.material_override = fm
+	n.add_child(fl)
+	var i := 0
+	var only := OS.get_cmdline_user_args().has("--close")
+	var single := ""
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--only="):
+			single = a.get_slice("=", 1)
+	if single != "":
+		for k in 3:
+			var mm := CarModel.build(Game.get_car(single)["body"], Game.get_car(single)["paint"])
+			var rr: Node3D = mm["root"]
+			rr.position = Vector3(-6.0 + k * 5.5, 0, 0)
+			rr.rotation.y = [0.7, 2.6, -1.57][k]
+			if k == 2:
+				(mm["paint_mat"] as ShaderMaterial).set_shader_parameter("dust", 0.6)
+			n.add_child(rr)
+		var cam2 := Camera3D.new()
+		n.add_child(cam2)
+		cam2.position = Vector3(-0.5, 4.2, 8.0)
+		cam2.look_at(Vector3(-0.5, 0.6, 0))
+		cam2.fov = 50
+		cam2.make_current()
+		return
+	for c in Game.CARS:
+		if only and i > 2:
+			break
+		var m := CarModel.build(c["body"], c["paint"])
+		var root: Node3D = m["root"]
+		root.position = Vector3(-15.0 + (i % 4) * 9.0, 0, -4.0 + int(i / 4) * 9.0)
+		root.rotation.y = 0.9
+		n.add_child(root)
+		i += 1
+	var cam := Camera3D.new()
+	n.add_child(cam)
+	cam.position = Vector3(-2, 11, 16) if not only else Vector3(-6.5, 5.5, 8.5)
+	cam.look_at(Vector3(-2.5, 0.5, 0.5) if not only else Vector3(-6.5, 0.8, -4.0))
+	cam.fov = 55
+	cam.make_current()
