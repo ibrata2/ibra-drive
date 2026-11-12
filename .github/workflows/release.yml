@@ -107,7 +107,7 @@ jobs:
 
   ios:
     needs: version
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - name: Install Godot (macOS) + iOS template
