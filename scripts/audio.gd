@@ -46,6 +46,7 @@ func _ready() -> void:
 	_sounds["error"] = _make_tones([220.0, 180.0], 0.12)
 	_sounds["crash"] = _make_crash(0.7, 0.35)
 	_sounds["crack"] = _make_crash(0.45, 0.8)
+	_sounds["horn"] = _make_horn(0.9)
 
 
 func play(snd: String, vol_db := -4.0) -> void:
@@ -156,3 +157,22 @@ func _make_crash(dur: float, bright: float) -> AudioStreamWAV:
 	wav.mix_rate = int(RATE)
 	wav.data = data
 	return wav
+
+
+
+## زمّور شاحنة: نغمتين مع بعض
+func _make_horn(dur: float) -> AudioStreamWAV:
+	var n := int(RATE * dur)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	for i in n:
+		var t := float(i) / RATE
+		var env := clampf(t * 30.0, 0.0, 1.0) * clampf((dur - t) * 12.0, 0.0, 1.0)
+		var v := (signf(sin(TAU * 233.0 * t)) * 0.5 + signf(sin(TAU * 294.0 * t)) * 0.5) * 0.28 + sin(TAU * 466.0 * t) * 0.1
+		var s16 := int(clampf(v * env, -1.0, 1.0) * 30000.0)
+		data.encode_s16(i * 2, s16)
+	var w := AudioStreamWAV.new()
+	w.format = AudioStreamWAV.FORMAT_16_BITS
+	w.mix_rate = int(RATE)
+	w.data = data
+	return w

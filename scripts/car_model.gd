@@ -460,7 +460,7 @@ static func _sphere_m(parent: Node3D, r: float, pos: Vector3, m: Material, sc: V
 
 
 ## يرجع: root, wheels(pivot/spin), wheel_pos, radius, rest, box_size, box_center, com_y, head_pos, tail_mat
-static func build(body: String, paint: Color) -> Dictionary:
+static func build(body: String, paint: Color, deco: Array = []) -> Dictionary:
 	var root := Node3D.new()
 	root.name = "Model"
 	var P := paint_mat(paint)
@@ -479,6 +479,8 @@ static func build(body: String, paint: Color) -> Dictionary:
 	var box_c := Vector3(0, 1.05, 0)
 	var com := 0.55
 	var head := []
+	var hitch := Vector3(0, 0.75, 2.6)
+	var extra_z := 0.0
 	match body:
 		"pickup", "monster":
 			var y := 0.0
@@ -623,6 +625,19 @@ static func build(body: String, paint: Color) -> Dictionary:
 			_box(root, Vector3(2.4, 0.4, 0.22), Vector3(0, 1.05, -3.3), C)
 			_cyl(root, 0.08, 1.6, Vector3(1.15, 3.1, -1.5), C)
 			head = [Vector3(-0.75, 1.35, -3.36), Vector3(0.75, 1.35, -3.36)]
+		"semi", "semi_long", "semi_v8":
+			var sm := _semi(root, body, P, G, B, C, H, T, deco)
+			r = sm["r"]
+			wx = sm["wx"]
+			wzf = sm["wzf"]
+			wzr = sm["wzr"]
+			rest = 0.42
+			box = sm["box"]
+			box_c = sm["box_c"]
+			com = 0.8
+			head = sm["head"]
+			hitch = sm["hitch"]
+			extra_z = sm["extra_z"]
 		"buggy":
 			r = 0.5
 			wx = 0.95
@@ -649,6 +664,8 @@ static func build(body: String, paint: Color) -> Dictionary:
 			for x in [-0.3, 0.0, 0.3]:
 				_box(root, Vector3(0.2, 0.09, 0.05), Vector3(x, 1.94, -0.66), H)
 			head = [Vector3(-0.3, 1.94, -0.7), Vector3(0.3, 1.94, -0.7)]
+	if not body.begins_with("semi"):
+		hitch = Vector3(0, 0.75, box_c.z + box.z * 0.5 + 0.1)
 	# العجلات
 	var wheels := []
 	var wpos := [Vector3(-wx, r, wzf), Vector3(wx, r, wzf), Vector3(-wx, r, wzr), Vector3(wx, r, wzr)]
@@ -661,13 +678,163 @@ static func build(body: String, paint: Color) -> Dictionary:
 		ww = 0.42
 	elif body == "truck":
 		ww = 0.4
+	elif body.begins_with("semi"):
+		ww = 0.55
 	for i in 4:
 		var wh := _wheel(r, ww)
 		wh["pivot"].position = wpos[i]
 		root.add_child(wh["pivot"])
 		wheels.append(wh)
+	# عجلات إضافية (المحور الخلفي المزدوج بالشاحنات) — تلحق العوارض وتدور ويه العجلة الخلفية
+	var extra := []
+	if extra_z != 0.0:
+		for i in [2, 3]:
+			var wh2 := _wheel(r, ww)
+			wh2["pivot"].position = Vector3(0, 0, extra_z - wzr)
+			(wheels[i]["pivot"] as Node3D).add_child(wh2["pivot"])
+			extra.append({"spin": wh2["spin"], "src": i})
 	var bottom := box_c.y - box.y * 0.5
 	if bottom < 0.32:
 		box_c.y += 0.32 - bottom
 	return {"root": root, "wheels": wheels, "wheel_pos": wpos, "radius": r, "rest": rest,
-		"box_size": box, "box_center": box_c, "com_y": com, "head_pos": head, "tail_mat": T, "paint_mat": P}
+		"box_size": box, "box_center": box_c, "com_y": com, "head_pos": head, "tail_mat": T, "paint_mat": P,
+		"hitch": hitch, "extra_wheels": extra}
+
+
+# ================================================================ رؤوس التريلات (الشاحنات القاطرة)
+const SLOGANS := ["ماشي بدعاء الوالدين", "عين الحسود بيها عود", "لا تسرع يا بابا نحن بانتظارك", "توكلت على الله",
+	"الله حاميها", "يا رايح للبصرة", "صنع في العراق", "الصبر مفتاح الفرج"]
+
+
+## semi = كابينة مسطحة (أوروبية) • semi_long = بوز طويل • semi_v8 = بوز طويل فخم بكروم
+static func _semi(root: Node3D, body: String, P: Material, G: Material, B: Material, C: Material, H: Material, T: Material, deco: Array) -> Dictionary:
+	var long := body != "semi"
+	var v8 := body == "semi_v8"
+	var chrome_on := deco.has("chrome") or v8
+	var BUMP: Material = C if chrome_on else B
+	var front := -3.3
+	var cab_back := -1.05
+	var fifth := 1.45
+	var wzf := -2.3
+	var wzr := 1.25
+	var extra_z := 2.55
+	var rear := 3.25
+	if long:
+		front = -4.2
+		cab_back = 0.35
+		fifth = 2.35
+		wzf = -3.2
+		wzr = 2.1
+		extra_z = 3.4
+		rear = 4.1
+	# الشاصي
+	_box(root, Vector3(1.15, 0.32, rear - front - 0.4), Vector3(0, 0.95, (rear + front) * 0.5 + 0.2), B)
+	_cyl(root, 0.62, 0.12, Vector3(0, 1.22, fifth), B, Vector3.ZERO, 20)
+	_box(root, Vector3(0.9, 0.08, 0.5), Vector3(0, 1.3, fifth + 0.35), C)
+	var cab_front := front
+	if long:
+		# البوز
+		var hood_top := 2.15 if v8 else 2.0
+		_loft(root, [[front, 1.0, 0.9, 0.95, hood_top - 0.25], [front + 0.12, 1.08, 0.98, 0.9, hood_top - 0.05],
+			[front + 0.9, 1.12, 1.02, 0.88, hood_top], [front + 2.5, 1.18, 1.08, 0.88, hood_top + 0.1]], P, 5.0, 28)
+		cab_front = front + 2.5
+		var grille_c: Material = C if (v8 or chrome_on) else B
+		_box(root, Vector3(1.5 if v8 else 1.3, 1.0, 0.06), Vector3(0, 1.45, front - 0.02), grille_c)
+		for k in 6:
+			_box(root, Vector3(1.36 if v8 else 1.16, 0.04, 0.05), Vector3(0, 1.05 + k * 0.17, front - 0.06), B)
+		for sgn in [-1.0, 1.0]:
+			_loft(root, [[front + 0.2, 0.32, 0.3, 0.75, 1.15], [front + 0.4, 0.38, 0.36, 0.68, 1.25], [front + 1.4, 0.38, 0.36, 0.68, 1.25], [front + 1.6, 0.32, 0.3, 0.75, 1.0]], P, 3.0, 16).position.x = 1.05 * sgn
+			_cyl(root, 0.17, 0.08, Vector3(0.8 * sgn, 1.55, front + 0.08), H, Vector3(PI / 2, 0, 0), 14)
+			_cyl(root, 0.11, 2.6 if v8 else 2.2, Vector3(1.12 * sgn, 2.9, cab_back - 0.15), C, Vector3.ZERO, 12)
+		if v8:
+			_box(root, Vector3(0.08, 0.5, 0.06), Vector3(0, 2.35, front + 0.15), C)
+	# الكابينة
+	var cab_top := 3.6 if not long else 3.25
+	var cb := [[cab_front, 1.15, 1.05, 0.95, cab_top - 0.35], [cab_front + 0.08, 1.24, 1.16, 0.88, cab_top - 0.1],
+		[cab_front + 0.4, 1.25, 1.18, 0.88, cab_top], [cab_back - 0.1, 1.25, 1.18, 0.88, cab_top], [cab_back, 1.18, 1.1, 0.92, cab_top - 0.08]]
+	_loft(root, cb, P, 7.0, 32)
+	# الزجاج الأمامي والجانبي
+	var ws_y := cab_top - 0.75
+	_box(root, Vector3(2.25, 0.95 if not long else 0.8, 0.05), Vector3(0, ws_y, cab_front - 0.01), G, Vector3(-0.1, 0, 0))
+	for sgn in [-1.0, 1.0]:
+		_box(root, Vector3(0.04, 0.8, 0.95), Vector3(1.26 * sgn, ws_y, cab_front + 0.75), G)
+		_box(root, Vector3(0.36, 0.06, 0.06), Vector3(1.4 * sgn, ws_y + 0.35, cab_front + 0.35), B)
+		_box(root, Vector3(0.06, 0.6, 0.22), Vector3(1.58 * sgn, ws_y + 0.05, cab_front + 0.35), B)
+		_cyl(root, 0.3, 1.3, Vector3(0.95 * sgn, 1.0, cab_back + 0.85 if long else -0.15), C, Vector3(PI / 2, 0, 0), 16)
+		# الرفارف الخلفية
+		_box(root, Vector3(0.62, 0.08, 2.4), Vector3(1.02 * sgn, 1.32, (wzr + extra_z) * 0.5), B)
+		_box(root, Vector3(0.62, 0.08, 0.8), Vector3(1.02 * sgn, 1.32, wzf), P)
+		_box(root, Vector3(0.22, 0.3, 0.06), Vector3(1.0 * sgn, 1.0, rear), T)
+	if not long:
+		# كابينة مسطحة: شبك ومصابيح وجنح هوائي
+		_box(root, Vector3(1.7, 0.7, 0.05), Vector3(0, 1.6, front - 0.03), C if chrome_on else B)
+		for k in 4:
+			_box(root, Vector3(1.6, 0.05, 0.05), Vector3(0, 1.35 + k * 0.17, front - 0.07), B if chrome_on else C)
+		for sgn in [-1.0, 1.0]:
+			_box(root, Vector3(0.46, 0.2, 0.06), Vector3(0.82 * sgn, 1.18, front - 0.05), H)
+		_box(root, Vector3(2.35, 0.55, 1.6), Vector3(0, cab_top + 0.2, cab_back - 0.9), P, Vector3(0.22, 0, 0))
+	else:
+		_box(root, Vector3(2.2, 0.08, 1.6), Vector3(0, cab_top + 0.04, cab_back - 0.8), P)
+	_box(root, Vector3(2.5, 0.42, 0.32), Vector3(0, 0.95, front - 0.12), BUMP)
+	# الإكسسوارات (التزيين)
+	if deco.has("visor"):
+		_box(root, Vector3(2.3, 0.08, 0.5), Vector3(0, cab_top - 0.12, cab_front - 0.22), P, Vector3(0.25, 0, 0))
+	if deco.has("lightbar"):
+		_box(root, Vector3(1.9, 0.1, 0.12), Vector3(0, cab_top + 0.12, cab_front + 0.2), B)
+		for k in 7:
+			_box(root, Vector3(0.18, 0.1, 0.08), Vector3(-0.81 + k * 0.27, cab_top + 0.12, cab_front + 0.13), H)
+	if deco.has("horns"):
+		for sgn in [-1.0, 1.0]:
+			var hn := _cyl(root, 0.07, 0.9, Vector3(0.35 * sgn, cab_top + 0.1, cab_front + 0.7), C, Vector3(PI / 2, 0, 0), 10)
+			hn.scale = Vector3(1.0, 1.0, 1.0)
+			_cyl(root, 0.14, 0.12, Vector3(0.35 * sgn, cab_top + 0.1, cab_front + 0.22), C, Vector3(PI / 2, 0, 0), 12)
+	if deco.has("flags"):
+		for sgn in [-1.0, 1.0]:
+			_cyl(root, 0.025, 1.1, Vector3(1.12 * sgn, 1.65, front - 0.15), C, Vector3.ZERO, 6)
+			var fz := front - 0.15
+			_box(root, Vector3(0.03, 0.1, 0.45), Vector3(1.12 * sgn, 2.12, fz + 0.24), mat("plain", Color(0.8, 0.07, 0.07)))
+			_box(root, Vector3(0.03, 0.1, 0.45), Vector3(1.12 * sgn, 2.02, fz + 0.24), mat("plain", Color(0.97, 0.97, 0.97)))
+			_box(root, Vector3(0.03, 0.1, 0.45), Vector3(1.12 * sgn, 1.92, fz + 0.24), mat("plain", Color(0.05, 0.05, 0.05)))
+			_box(root, Vector3(0.035, 0.04, 0.18), Vector3(1.12 * sgn, 2.02, fz + 0.24), mat("plain", Color(0.05, 0.5, 0.2)))
+	if deco.has("sidelights"):
+		var amber := StandardMaterial3D.new()
+		amber.albedo_color = Color(1, 0.55, 0.1)
+		amber.emission_enabled = true
+		amber.emission = Color(1, 0.5, 0.05)
+		amber.emission_energy_multiplier = 2.5
+		for sgn in [-1.0, 1.0]:
+			var z := cab_back + 0.3
+			while z < rear - 0.2:
+				_box(root, Vector3(0.05, 0.08, 0.14), Vector3(0.6 * sgn, 0.8, z), amber)
+				z += 0.55
+			_box(root, Vector3(0.05, 0.08, 1.6), Vector3(1.26 * sgn, 0.92, cab_front + 0.8), amber)
+	if deco.has("mudflaps"):
+		for sgn in [-1.0, 1.0]:
+			_box(root, Vector3(0.6, 0.65, 0.04), Vector3(1.0 * sgn, 0.72, rear - 0.05), B)
+			_box(root, Vector3(0.6, 0.06, 0.05), Vector3(1.0 * sgn, 0.95, rear - 0.07), C)
+	if deco.has("stripes"):
+		var gold := mat("plain", Color(0.95, 0.72, 0.2))
+		for sgn in [-1.0, 1.0]:
+			_box(root, Vector3(0.03, 0.12, cab_back - cab_front - 0.4), Vector3(1.26 * sgn, 1.55, (cab_front + cab_back) * 0.5), gold)
+			_box(root, Vector3(0.03, 0.05, cab_back - cab_front - 0.4), Vector3(1.26 * sgn, 1.72, (cab_front + cab_back) * 0.5), gold)
+	for d in deco:
+		if str(d).begins_with("slogan:"):
+			var idx := int(str(d).get_slice(":", 1))
+			var lb := Label3D.new()
+			lb.text = SLOGANS[clampi(idx, 0, SLOGANS.size() - 1)]
+			lb.font_size = 64
+			lb.pixel_size = 0.0045
+			lb.modulate = Color(1, 0.85, 0.3)
+			lb.outline_size = 10
+			lb.outline_modulate = Color(0, 0, 0, 0.8)
+			lb.position = Vector3(0, cab_top - 0.12, cab_front - 0.05)
+			lb.rotation.y = PI
+			lb.double_sided = false
+			root.add_child(lb)
+	var head := [Vector3(-0.82, 1.18, front - 0.1), Vector3(0.82, 1.18, front - 0.1)]
+	if long:
+		head = [Vector3(-0.8, 1.55, front), Vector3(0.8, 1.55, front)]
+	var length := rear - front
+	return {"r": 0.55, "wx": 1.02, "wzf": wzf, "wzr": wzr, "extra_z": extra_z, "head": head,
+		"hitch": Vector3(0, 1.3, fifth),
+		"box": Vector3(2.5, 2.3, length - 0.2), "box_c": Vector3(0, 1.95 if not long else 1.75, (front + rear) * 0.5)}

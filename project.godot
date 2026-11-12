@@ -13,6 +13,9 @@ config/icon="res://icon.svg"
 
 Game="*res://scripts/game.gd"
 Places="*res://scripts/places.gd"
+Jobs="*res://scripts/jobs.gd"
+Story="*res://scripts/story.gd"
+School="*res://scripts/school.gd"
 
 [display]
 

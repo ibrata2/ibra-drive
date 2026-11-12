@@ -5,6 +5,7 @@ signal resume_pressed
 signal garage_pressed
 signal camera_pressed
 signal quit_pressed
+signal extra_pressed
 
 var world: Node
 var root: Control
@@ -23,6 +24,11 @@ var prompt: Label
 var pause_panel: Control
 var minimap: MiniMap
 var hint: Label
+var loot_panel: Control
+var btn_tow: Button
+var btn_extra: Button
+var btn_menu: Button
+var info_label: Label
 
 
 class MiniMap extends Control:
@@ -129,6 +135,7 @@ func _build_loot() -> void:
 	p.position = Vector2(20, 20)
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(p)
+	loot_panel = p
 	var v := VBoxContainer.new()
 	p.add_child(v)
 	var t := _label("غنائم الرحلة", 15, Color(0.7, 0.72, 0.78))
@@ -261,12 +268,26 @@ func _build_pause() -> void:
 	var b3 := _menu_button("سحب للكراج (تخسر 40% من الغنائم)")
 	b3.pressed.connect(func(): garage_pressed.emit())
 	v.add_child(b3)
+	btn_tow = b3
+	btn_extra = _menu_button("")
+	btn_extra.visible = false
+	btn_extra.pressed.connect(func(): extra_pressed.emit())
+	v.add_child(btn_extra)
+	btn_menu = _menu_button("القائمة الرئيسية")
+	btn_menu.pressed.connect(func():
+		get_tree().paused = false
+		Game.goto("menu"))
+	v.add_child(btn_menu)
 	var b4 := _menu_button("طلوع من اللعبة")
 	b4.pressed.connect(func(): quit_pressed.emit())
 	v.add_child(b4)
 	var info := _label("ارجع بنفسك للكراج (المربع الأخضر) حتى تحفظ كل الغنائم", 15, Color(0.7, 0.75, 0.8))
 	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(info)
+	info_label = info
+	var cr := _label("برمجة وتطوير إبراهيم الخزرجي\nتليكرام: t.me/ibraprogram • تيك توك: ibraprogram", 14, Color(1, 0.8, 0.4))
+	cr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(cr)
 
 
 func _unhandled_input(event: InputEvent) -> void:

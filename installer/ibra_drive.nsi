@@ -6,7 +6,7 @@ Unicode true
 !ifndef VERSION
   !define VERSION "1.1.0"
 !endif
-!define PUBLISHER "IBRA"
+!define PUBLISHER "برمجة وتطوير إبراهيم الخزرجي - t.me/ibraprogram"
 !define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\IBRA_DRIVE"
 
 Name "${APPNAME}"
@@ -15,7 +15,7 @@ InstallDir "$PROGRAMFILES64\IBRA DRIVE"
 InstallDirRegKey HKLM "Software\IBRA_DRIVE" "InstallDir"
 RequestExecutionLevel admin
 SetCompressor /SOLID lzma
-BrandingText "IBRA DRIVE ${VERSION}"
+BrandingText "IBRA DRIVE ${VERSION} • برمجة وتطوير إبراهيم الخزرجي • t.me/ibraprogram"
 
 !define MUI_ICON "icon.ico"
 !define MUI_UNICON "icon.ico"

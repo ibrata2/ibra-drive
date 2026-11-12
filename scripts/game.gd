@@ -39,6 +39,16 @@ const CARS := [
 	{"id": "monster", "name": "مونستر تراك", "desc": "تايرات عملاقة تعبر أي شي.",
 		"price": {"coins": 7000, "parts": 120, "crystals": 25}, "body": "monster", "drive": "awd", "paint": Color(0.1, 0.75, 0.35),
 		"speed": 35.0, "accel": 1.25, "grip": 0.85, "offroad": 1.2, "fuel": 150.0, "mass": 2200.0},
+	# رؤوس التريلات — تنشرى وتنطور من كراج الشاحنات (ما تطلع بالكراج القديم)
+	{"id": "semi_rafidain", "name": "قاطرة الرافدين", "desc": "رأس تريلة بكابينة مسطحة. شاحنة البداية بشركة النقل.",
+		"price": {}, "body": "semi", "drive": "rwd", "paint": Color(0.78, 0.1, 0.08), "hidden": true, "truck": true,
+		"speed": 26.0, "accel": 1.25, "grip": 0.95, "offroad": 0.7, "fuel": 420.0, "mass": 7500.0},
+	{"id": "semi_dijla", "name": "قاطرة دجلة", "desc": "بوز طويل ومحرك أقوى، تسحب مقطورتين براحة.",
+		"price": {"coins": 9000}, "body": "semi_long", "drive": "rwd", "paint": Color(0.12, 0.32, 0.62), "hidden": true, "truck": true,
+		"speed": 28.0, "accel": 1.6, "grip": 1.0, "offroad": 0.75, "fuel": 540.0, "mass": 8000.0},
+	{"id": "semi_babil", "name": "قاطرة بابل V8", "desc": "ملكة الطريق. كروم، محرك V8 وخزان ضخم.",
+		"price": {"coins": 22000, "parts": 60}, "body": "semi_v8", "drive": "awd", "paint": Color(0.06, 0.06, 0.07), "hidden": true, "truck": true,
+		"speed": 31.0, "accel": 1.95, "grip": 1.05, "offroad": 0.85, "fuel": 680.0, "mass": 8600.0},
 ]
 
 const UPGRADES := [
@@ -61,6 +71,8 @@ var run: Dictionary = {}
 var current_place: int = 0
 var last_result: Dictionary = {}
 var test_car := ""
+var drive_spec: Dictionary = {}
+var scene_arg: Variant = null
 var arabic_font: SystemFont
 
 
@@ -118,6 +130,7 @@ func default_data() -> Dictionary:
 		"version": 1, "coins": 250, "scrap": 0, "parts": 0, "crystals": 0, "xp": 0,
 		"owned": ["pickup", "sedan"], "car": "sedan", "upgrades": {}, "paint": {},
 		"treasures": [], "visits": {}, "trips": 0, "items_total": 0,
+		"deco": {}, "truck": {}, "story": {}, "school": {}, "license": {}, "player_name": "", "asked_skill": false,
 	}
 
 
@@ -166,6 +179,18 @@ func car_paint(id: String) -> Color:
 	if p is String:
 		return Color.from_string(p, get_car(id)["paint"])
 	return get_car(id)["paint"]
+
+
+func car_deco(id: String) -> Array:
+	var d = data.get("deco", {}).get(id, [])
+	return d if d is Array else []
+
+
+func set_deco(id: String, list: Array) -> void:
+	if not data.has("deco") or not (data["deco"] is Dictionary):
+		data["deco"] = {}
+	data["deco"][id] = list
+	save_game()
 
 
 func set_paint(id: String, c: Color) -> void:

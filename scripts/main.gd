@@ -4,6 +4,11 @@ extends Node
 const GarageScene := preload("res://scripts/garage.gd")
 const MapScene := preload("res://scripts/map_screen.gd")
 const WorldScene := preload("res://scripts/world.gd")
+const DriveScene := preload("res://scripts/drive_world.gd")
+const MenuScene := preload("res://scripts/menu.gd")
+const StoryScene := preload("res://scripts/story_screen.gd")
+const TruckScene := preload("res://scripts/truck_hub.gd")
+const SchoolScene := preload("res://scripts/school_screen.gd")
 
 var current: Node = null
 var loading: CanvasLayer
@@ -33,7 +38,40 @@ func _ready() -> void:
 		if a == "--map":
 			_on_scene_requested("map", null)
 			return
-	_on_scene_requested("garage", null)
+		if a in ["--menu", "--story", "--truck", "--school", "--garage"]:
+			_on_scene_requested(a.substr(2), null)
+			return
+		if a.begins_with("--lesson="):
+			_on_scene_requested("drive", School.spec_for(a.get_slice("=", 1)))
+			return
+		if a.begins_with("--chapter="):
+			var cc := a.get_slice("=", 1)
+			_on_scene_requested("drive", Story.mission_for(cc.get_slice(":", 0), int(cc.get_slice(":", 1))))
+			return
+		if a.begins_with("--story-play="):
+			var cp := a.get_slice("=", 1)
+			_on_scene_requested("story_play", {"car": cp.get_slice(":", 0), "chapter": int(cp.get_slice(":", 1))})
+			return
+		if a.begins_with("--free="):
+			var fp := a.get_slice("=", 1).split(":")
+			_on_scene_requested("drive", {"kind": "free", "goal": "deliver", "from": fp[0], "to": fp[1], "car": fp[2] if fp.size() > 2 else "semi_rafidain", "trailers": 0, "hour": 10.0, "weather": "clear", "seed": 5})
+			return
+		if a == "--exam":
+			_on_scene_requested("drive", School.EXAM)
+			return
+		if a.begins_with("--contract="):
+			var parts := a.get_slice("=", 1).split(":")
+			var c := Jobs.make_contract(parts[0], parts[1], parts[2], int(parts[3]) if parts.size() > 3 else 1, {})
+			c["trailers"] = int(parts[3]) if parts.size() > 3 else 1
+			c["car"] = Jobs.truck()["cab"]
+			c["seed"] = 77
+			if parts.size() > 4:
+				c["weather"] = parts[4]
+			if parts.size() > 5:
+				c["events"] = [parts[5]]
+			_on_scene_requested("drive", c)
+			return
+	_on_scene_requested("menu", null)
 
 
 ## أدوات فحص للمطوّر: --shot=file.png --shot-time=6 --drive --steer=0.3 --hour=12 --weather=rain --cam=1
@@ -74,6 +112,37 @@ func _on_scene_requested(scene_name: String, arg: Variant) -> void:
 		current.queue_free()
 		current = null
 	match scene_name:
+		"menu":
+			current = MenuScene.new()
+			add_child(current)
+		"story":
+			current = StoryScene.new()
+			add_child(current)
+		"story_play":
+			var ss = StoryScene.new()
+			ss.play_arg = arg
+			current = ss
+			add_child(current)
+		"truck":
+			current = TruckScene.new()
+			add_child(current)
+		"school":
+			current = CanvasLayer.new()
+			var sc = SchoolScene.new()
+			sc.arg = arg
+			current.add_child(sc)
+			add_child(current)
+		"drive":
+			var spec: Dictionary = arg
+			Game.drive_spec = spec
+			_show_loading_text(str(spec.get("title", "")) if str(spec.get("title", "")) != "" else _spec_title(spec), _spec_sub(spec))
+			await get_tree().process_frame
+			await get_tree().process_frame
+			var dw = DriveScene.new()
+			dw.spec = spec
+			current = dw
+			add_child(dw)
+			_hide_loading()
 		"garage":
 			current = GarageScene.new()
 			add_child(current)
@@ -90,6 +159,55 @@ func _on_scene_requested(scene_name: String, arg: Variant) -> void:
 			current = w
 			add_child(w)
 			_hide_loading()
+
+
+func _spec_title(spec: Dictionary) -> String:
+	if spec.has("from") and spec.has("to"):
+		return "%s ← %s" % [Jobs.city_name(spec["to"]), Jobs.city_name(spec["from"])]
+	return str(spec.get("dest", "الطريق"))
+
+
+func _spec_sub(spec: Dictionary) -> String:
+	var parts: PackedStringArray = []
+	var cid: String = spec.get("cargo", "")
+	if Jobs.CARGO.has(cid):
+		parts.append(Jobs.CARGO[cid]["name"])
+	if int(spec.get("trailers", 0)) >= 2:
+		parts.append("مقطورتين")
+	if int(spec.get("km", 0)) > 0:
+		parts.append("%s كم" % Jobs.ar_num(int(spec["km"])))
+	var w: String = spec.get("weather", "")
+	if Places.WEATHER.has(w):
+		parts.append(Places.WEATHER[w]["name"])
+	parts.append("جاري تجهيز الطريق...")
+	return " • ".join(parts)
+
+
+func _show_loading_text(title: String, sub: String) -> void:
+	loading = CanvasLayer.new()
+	loading.layer = 50
+	var bg := ColorRect.new()
+	bg.color = Color(0.05, 0.06, 0.08)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	loading.add_child(bg)
+	var v := VBoxContainer.new()
+	v.set_anchors_preset(Control.PRESET_CENTER)
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	v.grow_vertical = Control.GROW_DIRECTION_BOTH
+	loading.add_child(v)
+	var t := Label.new()
+	t.text = title
+	t.add_theme_font_size_override("font_size", 46)
+	t.add_theme_color_override("font_color", Color(1, 0.78, 0.32))
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(t)
+	var s := Label.new()
+	s.text = sub
+	s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	s.add_theme_color_override("font_color", Color(0.8, 0.82, 0.86))
+	v.add_child(s)
+	add_child(loading)
 
 
 func _show_loading(idx: int) -> void:

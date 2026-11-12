@@ -31,13 +31,26 @@ var headlights: Array = []
 var tail_mat: StandardMaterial3D
 var driven_count := 4
 var prev_vel := Vector3.ZERO
+# الحمولة والمقطورات (تتغير من عالم الطريق)
+var base_mass := 1000.0
+var load_mass := 0.0
+var brake_load := 0.6
+var fuel_load := 1.0
+# أعطال وتعب: انفجار تاير، سحب التوجيه، تحديد السرعة
+var burst_wheel := -1
+var steer_bias := 0.0
+var speed_mult := 1.0
+var horn_t := 0.0
+var roll_coef := 0.05
+var fuel_mult := 1.0
 
 
 func setup(id: String, paint: Color) -> void:
 	car_id = id
 	stats = Game.car_stats(id)
 	mass = stats["mass"]
-	model = CarModel.build(stats["body"], paint)
+	base_mass = mass
+	model = CarModel.build(stats["body"], paint, Game.car_deco(id))
 	add_child(model["root"])
 	wheel_r = model["radius"]
 	rest_len = model["rest"]
@@ -93,6 +106,17 @@ func setup(id: String, paint: Color) -> void:
 		headlights.append(sl)
 
 
+## وزن الحمولة: السيارة تصير أثكل (تسارع أبطأ، فرامل أطول، بانزين أكثر) والعوارض تتعدل حتى ما تنزل
+func set_load(m: float, brake_factor := 0.6) -> void:
+	load_mass = maxf(m, 0.0)
+	brake_load = brake_factor
+	mass = base_mass + load_mass
+	var per_wheel: float = mass * 9.8 / 4.0
+	spring_k = per_wheel / (rest_len * 0.45)
+	damp_c = 2.0 * sqrt(spring_k * mass / 4.0) * 0.3 * float(stats["susp"])
+	fuel_load = 1.0 + load_mass / base_mass * 0.5
+
+
 func set_lights(on: bool) -> void:
 	lights_on = on
 	for h in headlights:
@@ -125,7 +149,7 @@ func _read_input() -> void:
 		return
 	throttle_in = Input.get_action_strength("accelerate")
 	brake_in = Input.get_action_strength("brake")
-	steer_in = Input.get_action_strength("steer_right") - Input.get_action_strength("steer_left")
+	steer_in = clampf(Input.get_action_strength("steer_right") - Input.get_action_strength("steer_left") + steer_bias, -1.0, 1.0)
 	handbrake = Input.is_action_pressed("handbrake")
 	nitro_on = max_nitro > 0.0 and nitro > 0.05 and Input.is_action_pressed("nitro") and throttle_in > 0.1 and fuel > 0.0
 
@@ -135,9 +159,9 @@ func _physics_process(delta: float) -> void:
 	_read_input()
 	var up := global_basis.y
 	var fwd_body := -global_basis.z
-	var top: float = stats["top_speed"] * (1.3 if nitro_on else 1.0)
+	var top: float = stats["top_speed"] * (1.3 if nitro_on else 1.0) * speed_mult
 	speed = linear_velocity.dot(fwd_body)
-	var engine: float = stats["accel"] * mass * 6.5 * (1.7 if nitro_on else 1.0)
+	var engine: float = stats["accel"] * base_mass * 6.5 * (1.7 if nitro_on else 1.0)
 	if fuel <= 0.0:
 		engine = 0.0
 	var off: float = clampf(stats["offroad"], 0.3, 1.3)
@@ -146,7 +170,10 @@ func _physics_process(delta: float) -> void:
 	steer_angle = move_toward(steer_angle, -steer_in * max_steer, delta * 2.8)
 	grounded_count = 0
 	slip = 0.0
+	var brake_mass := base_mass + load_mass * brake_load
+	var wi := -1
 	for w in wheels:
+		wi += 1
 		var ray: RayCast3D = w["ray"]
 		ray.force_raycast_update()
 		var origin := ray.global_position
@@ -175,6 +202,8 @@ func _physics_process(delta: float) -> void:
 				mu *= 1.06
 				if handbrake:
 					mu *= 0.42
+			if wi == burst_wheel:
+				mu *= 0.4
 			var max_f := fs * mu
 			var lat_f := clampf(-lat_v * (mass / 4.0) / delta * 0.3, -max_f, max_f)
 			slip = maxf(slip, absf(lat_v))
@@ -187,10 +216,10 @@ func _physics_process(delta: float) -> void:
 					var rf := clampf(1.0 - pow(absf(minf(speed, 0.0)) / (top * 0.3), 2.0), 0.0, 1.0)
 					lon_f -= brake_in * engine * 0.5 / driven_count * rf
 			if brake_in > 0.0 and speed > 1.0:
-				lon_f -= signf(lon_v) * brake_in * mass * 9.0 / 4.0
+				lon_f -= signf(lon_v) * brake_in * brake_mass * 9.0 / 4.0
 			if handbrake and not w["front"] and absf(lon_v) > 0.3:
-				lon_f -= signf(lon_v) * mass * 5.0 / 4.0
-			lon_f -= lon_v * mass * (0.05 + (1.0 - surf) * 0.18) / 4.0
+				lon_f -= signf(lon_v) * brake_mass * 5.0 / 4.0
+			lon_f -= lon_v * mass * (roll_coef + (1.0 - surf) * 0.18) / 4.0
 			if throttle_in < 0.05 and brake_in < 0.05 and absf(lon_v) < 1.5:
 				lon_f -= lon_v * mass * 1.5 / 4.0
 			lon_f = clampf(lon_f, -max_f * 1.15, max_f * 1.15)
@@ -211,11 +240,11 @@ func _physics_process(delta: float) -> void:
 		(w["spin_node"] as Node3D).rotation.x = -w["spin"]
 	if grounded_count == 0:
 		angular_velocity *= 0.995
-		apply_torque(global_basis.x * (throttle_in - brake_in) * mass * 0.6)
+		apply_torque(global_basis.x * (throttle_in - brake_in) * base_mass * 0.6)
 	else:
 		apply_central_force(-up * absf(speed) * mass * 0.03)
 	# الوقود والنيترو
-	var use := (throttle_in + brake_in * 0.4) * 0.42 + 0.03
+	var use := ((throttle_in + brake_in * 0.4) * 0.42 + 0.03) * fuel_load * fuel_mult
 	if nitro_on:
 		use *= 2.0
 		nitro = maxf(nitro - delta, 0.0)
@@ -235,7 +264,7 @@ func _physics_process(delta: float) -> void:
 			apply_central_force((fw.normalized() * dirn * 5.0 + Vector3.UP * 2.5) * mass * k * 0.6)
 	# مساعد الصعود: من تكون بطيء على منحدر وتدوس بنزين
 	if grounded_count >= 2 and throttle_in > 0.3 and absf(speed) < 7.0 and up.y < 0.95 and fuel > 0.0:
-		apply_central_force(fwd_body * mass * 3.5 * throttle_in * clampf((1.0 - up.y) * 6.0, 0.3, 1.0))
+		apply_central_force(fwd_body * base_mass * 3.5 * throttle_in * clampf((1.0 - up.y) * 6.0, 0.3, 1.0))
 	# أضواء البريك
 	if tail_mat:
 		tail_mat.emission_energy_multiplier = 4.0 if (brake_in > 0.1 and speed > 0.5) or handbrake else (1.5 if lights_on else 0.6)

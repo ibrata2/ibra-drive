@@ -237,6 +237,10 @@ func _build_ui() -> void:
 	top.add_child(th)
 	th.add_child(_label("IBRA DRIVE", 28, Color(1, 0.75, 0.3)))
 	th.add_child(_label("الكراج", 22, Color(0.8, 0.82, 0.88)))
+	var menu_b := _button("القائمة الرئيسية", Color(0.22, 0.24, 0.28), 15)
+	menu_b.custom_minimum_size = Vector2(150, 38)
+	menu_b.pressed.connect(func(): Game.goto("menu"))
+	th.add_child(menu_b)
 	var sp := Control.new()
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	th.add_child(sp)
@@ -355,6 +359,8 @@ func _refresh_cars() -> void:
 	for c in cars_list.get_children():
 		c.queue_free()
 	for car in Game.CARS:
+		if car.get("hidden", false):
+			continue
 		var id: String = car["id"]
 		var owned := Game.owns(id)
 		var col := Color(0.12, 0.13, 0.16)
