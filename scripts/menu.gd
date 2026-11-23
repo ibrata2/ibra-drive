@@ -14,7 +14,7 @@ func _ready() -> void:
 	turn = sr["turn"]
 	cam = sr["cam"]
 	var cab: String = Jobs.truck()["cab"]
-	var m := CarModel.build(Game.get_car(cab)["body"], Game.car_paint(cab), Game.car_deco(cab))
+	var m := CarModel.build(Game.get_car(cab)["body"], Game.car_paint(cab), Game.car_deco(cab), Game.car_skin(cab))
 	turn.add_child(m["root"])
 	var tr := TruckTrailer.new()
 	turn.add_child(tr)
@@ -113,7 +113,7 @@ func _build_ui() -> void:
 	v.add_child(sp)
 	var info := UIKit.label("فلوس %d  •  السمعة %d (%s)  •  مستوى الاستكشاف %d" % [int(Game.data["coins"]), Jobs.rep(), Jobs.rep_title(), Game.level()], 17, Color(1, 0.82, 0.35))
 	v.add_child(info)
-	var ver := UIKit.label("v2.2.0  •  برمجة وتطوير إبراهيم الخزرجي\nتطبيقاتي: ibraprogram.netlify.app  •  تليكرام: t.me/ibraprogram  •  تيك توك: ibraprogram", 15, Color(0.62, 0.65, 0.72))
+	var ver := UIKit.label("v2.3.0  •  برمجة وتطوير إبراهيم الخزرجي\nتطبيقاتي: ibraprogram.netlify.app  •  تليكرام: t.me/ibraprogram  •  تيك توك: ibraprogram", 15, Color(0.62, 0.65, 0.72))
 	v.add_child(ver)
 
 

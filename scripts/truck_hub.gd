@@ -118,7 +118,7 @@ func _show_rig() -> void:
 		c.queue_free()
 	holder.position = Vector3(-7.0, 0, 0.0)
 	var cab: String = Jobs.truck()["cab"]
-	var m := CarModel.build(Game.get_car(cab)["body"], Game.car_paint(cab), Game.car_deco(cab))
+	var m := CarModel.build(Game.get_car(cab)["body"], Game.car_paint(cab), Game.car_deco(cab), Game.car_skin(cab))
 	holder.add_child(m["root"])
 	var double := preview_double and bool(Jobs.truck()["dolly"])
 	var opts := {"label": "نقليات الرافدين"}
@@ -468,6 +468,15 @@ func _fill_deco() -> void:
 		t["deco_owned"] = []
 	var owned: Array = t["deco_owned"]
 	var active: Array = Game.car_deco(cab).duplicate()
+	if String(Game.get_car(cab).get("skin", "")) != "":
+		var pro := Game.car_skin(cab) != ""
+		var lb := UIKit.button("الشكل: مجسم احترافي" if pro else "الشكل: كلاسيكي (بالإكسسوارات)", Color(0.55, 0.38, 0.08) if pro else Color(0.2, 0.32, 0.5), 18, 50)
+		lb.pressed.connect(func():
+			Game.toggle_classic(cab)
+			_refresh_all())
+		deco_list.add_child(lb)
+		if pro:
+			deco_list.add_child(UIKit.label("الصبغ يشتغل على المجسم. الكروم والأضواء والأعلام تطلع بالشكل الكلاسيكي.", 15, Color(0.75, 0.78, 0.85), true))
 	deco_list.add_child(UIKit.label("صبغ الكابينة", 22, UIKit.GOLD))
 	deco_list.add_child(_color_grid(func(col: Color):
 		Game.set_paint(cab, col)

@@ -216,10 +216,26 @@ static func _scale_st(stations: Array, sx: float) -> Array:
 	return out
 
 
-static func _wheel(r: float, w: float) -> Dictionary:
+static func _wheel(r: float, w: float, skin := "", side := 1.0) -> Dictionary:
 	var pivot := Node3D.new()
 	var spin := Node3D.new()
 	pivot.add_child(spin)
+	# عجلة من مكتبة IBRA: صورة وجه العجلة (مأخوذة من المجسم W04) على الجانبين + تاير مرسوم — خفيفة للموبايل
+	if skin != "":
+		var fm := _wheel_face_mat(skin)
+		if fm != null:
+			_cyl(spin, r * 0.97, w, Vector3.ZERO, mat("tire"), Vector3(0, 0, PI / 2), 24)
+			_cyl(spin, r * 0.62, w * 0.9, Vector3.ZERO, mat("rim"), Vector3(0, 0, PI / 2), 16)
+			for sd in [-1.0, 1.0]:
+				var q := MeshInstance3D.new()
+				var qm := QuadMesh.new()
+				qm.size = Vector2(r * 2.0, r * 2.0)
+				q.mesh = qm
+				q.material_override = fm
+				q.position = Vector3(sd * (w * 0.5 + 0.006), 0, 0)
+				q.rotation.y = PI / 2.0 * sd
+				spin.add_child(q)
+			return {"pivot": pivot, "spin": spin}
 	_cyl(spin, r * 0.93, w, Vector3.ZERO, mat("tire"), Vector3(0, 0, PI / 2), 20)
 	_cyl(spin, r, w * 0.78, Vector3.ZERO, mat("tire"), Vector3(0, 0, PI / 2), 20)
 	_cyl(spin, r * 0.6, w + 0.02, Vector3.ZERO, mat("rim"), Vector3(0, 0, PI / 2), 16)
@@ -463,7 +479,7 @@ static func _sphere_m(parent: Node3D, r: float, pos: Vector3, m: Material, sc: V
 static func build(body: String, paint: Color, deco: Array = [], skin := "") -> Dictionary:
 	var d := _build(body, paint, deco)
 	if skin != "" and SKINS.has(skin):
-		apply_skin(d, skin)
+		apply_skin(d, skin, paint)
 	return d
 
 
@@ -483,6 +499,10 @@ const SKINS := {
 	"V05": {"yaw": PI, "len": 6.6, "name": "جكسارة مدرعة"},
 	"V06": {"yaw": PI, "len": 4.4, "name": "سيارة متروكة"},
 	"V07": {"yaw": -PI / 2, "len": 4.8, "name": "بيكب متروك"},
+	# قاطرة ومقطورة بدون تكستشر: تنصبغ بالكود (zones) • fit = العرض/الارتفاع/الطول بالمتر
+	"T01": {"yaw": PI, "fit": Vector3(2.45, 3.4, 6.55), "zc": -0.025, "keep_wheels": true, "axles": [-2.15, 1.04, 2.6],
+		"zones": {"chassis": 0.3, "cab": 0.64, "glass": Vector2(0.56, 0.86)}},
+	"T04": {"yaw": PI, "zones": {"chassis": 0.3, "cab": -1.0}},
 	"C01": {"h": 1.78}, "C02": {"h": 1.74}, "C03": {"h": 1.66},
 	"C04": {"h": 1.76}, "C05": {"h": 1.75}, "C06": {"h": 1.8},
 }
@@ -508,7 +528,7 @@ static func _aabb_of(n: Node3D, xf: Transform3D, acc: Array) -> void:
 
 ## مجسم جاهز: سيارة (طوله = len أو length) أو شخصية (طولها = h). الأرضية y=0 والمركز على x/z.
 ## يرجع null إذا المجسم مو موجود.
-static func skin_node(code: String, length := 0.0, fade := 0.0) -> Node3D:
+static func skin_node(code: String, length := 0.0, fade := 0.0, paint := Color(0, 0, 0, 0), fit := Vector3.ZERO) -> Node3D:
 	var ps := _skin_scene(code)
 	if ps == null:
 		return null
@@ -526,15 +546,93 @@ static func skin_node(code: String, length := 0.0, fade := 0.0) -> Node3D:
 	else:
 		var want := length if length > 0.0 else float(info.get("len", 4.5))
 		sc = want / maxf(bb.size.z, 0.01)
+	var sv := Vector3.ONE * sc
+	if fit == Vector3.ZERO and info.has("fit"):
+		fit = info["fit"]
+	if fit != Vector3.ZERO:
+		sv = Vector3(fit.x / maxf(bb.size.x, 0.01), fit.y / maxf(bb.size.y, 0.01), fit.z / maxf(bb.size.z, 0.01))
 	var wrap := Node3D.new()
 	wrap.name = "Skin_" + code
 	wrap.add_child(spin)
-	spin.scale = Vector3.ONE * sc
+	spin.scale = sv
 	var c := bb.get_center()
-	spin.position = Vector3(-c.x * sc, -bb.position.y * sc, -c.z * sc)
+	spin.position = Vector3(-c.x * sv.x, -bb.position.y * sv.y, -c.z * sv.z)
+	if info.has("zones"):
+		_apply_zones(inner, info["zones"], paint if paint.a > 0.0 else Color(0.85, 0.85, 0.85))
 	if fade > 0.0:
 		_set_range(inner, fade)
 	return wrap
+
+
+## صبغ مجسم ما بيه تكستشر حسب المناطق: الشاصي تحت، الكابينة كدام، والزجاج بالواجهة
+static var _zone_shader: Shader
+
+
+static func _apply_zones(n: Node, z: Dictionary, paint: Color) -> void:
+	if n is MeshInstance3D and (n as MeshInstance3D).mesh != null:
+		if _zone_shader == null:
+			_zone_shader = Shader.new()
+			_zone_shader.code = """
+shader_type spatial;
+uniform vec4 paint : source_color;
+uniform vec4 dark : source_color = vec4(0.09, 0.09, 0.1, 1.0);
+uniform vec4 glass : source_color = vec4(0.12, 0.17, 0.22, 1.0);
+uniform vec3 bmin;
+uniform vec3 bsize;
+uniform float chassis_fy = 0.3;
+uniform float cab_fz = -1.0;
+uniform vec2 glass_band = vec2(2.0, 2.0);
+varying vec3 lp;
+varying vec3 ln;
+void vertex() { lp = (VERTEX - bmin) / bsize; ln = NORMAL; }
+void fragment() {
+	vec3 c = paint.rgb;
+	float rough = 0.42;
+	float metal = 0.15;
+	bool cab = lp.z > cab_fz;
+	if (lp.y < chassis_fy || !cab) { c = dark.rgb; rough = 0.75; metal = 0.35; }
+	if (cab && lp.y > glass_band.x && lp.y < glass_band.y && (ln.z > 0.5 || (abs(ln.x) > 0.6 && lp.z > cab_fz + (1.0 - cab_fz) * 0.55))) {
+		c = glass.rgb; rough = 0.08; metal = 0.6;
+	}
+	// غبار خفيف بالأسفل
+	c = mix(c, vec3(0.62, 0.53, 0.4), clamp((0.45 - lp.y) * 0.5, 0.0, 0.18));
+	ALBEDO = c;
+	ROUGHNESS = rough;
+	METALLIC = metal;
+}
+"""
+		var mi := n as MeshInstance3D
+		var bb := mi.mesh.get_aabb()
+		var sm := ShaderMaterial.new()
+		sm.shader = _zone_shader
+		sm.set_shader_parameter("paint", paint)
+		sm.set_shader_parameter("bmin", bb.position)
+		sm.set_shader_parameter("bsize", bb.size)
+		sm.set_shader_parameter("chassis_fy", float(z.get("chassis", 0.0)))
+		sm.set_shader_parameter("cab_fz", float(z.get("cab", -1.0)))
+		sm.set_shader_parameter("glass_band", z.get("glass", Vector2(2, 2)))
+		mi.material_override = sm
+	for ch in n.get_children():
+		_apply_zones(ch, z, paint)
+
+
+static var _face_cache := {}
+
+
+static func _wheel_face_mat(code: String) -> StandardMaterial3D:
+	if not _face_cache.has(code):
+		var path := "res://models/%s_face.png" % code
+		var m: StandardMaterial3D = null
+		if ResourceLoader.exists(path):
+			m = StandardMaterial3D.new()
+			m.albedo_texture = load(path)
+			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+			m.alpha_scissor_threshold = 0.5
+			m.roughness = 0.55
+			m.metallic = 0.25
+			m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		_face_cache[code] = m
+	return _face_cache[code]
 
 
 static func _set_range(n: Node, dist: float) -> void:
@@ -547,19 +645,35 @@ static func _set_range(n: Node, dist: float) -> void:
 
 
 ## يخفي الجسم المرسوم بالكود ويحط المجسم بمكانه (الفيزياء والعجلات الوهمية تبقى نفسها)
-static func apply_skin(d: Dictionary, code: String) -> void:
+static func apply_skin(d: Dictionary, code: String, paint := Color(0, 0, 0, 0)) -> void:
 	var root: Node3D = d["root"]
 	var box: Vector3 = d["box_size"]
 	var bc: Vector3 = d["box_center"]
 	var info: Dictionary = SKINS.get(code, {})
-	var n := skin_node(code, float(info.get("len", box.z)))
+	var n := skin_node(code, float(info.get("len", box.z)), 0.0, paint)
 	if n == null:
 		return
+	var keep := []
+	if info.get("keep_wheels", false):
+		for w in d["wheels"]:
+			keep.append(w["pivot"])
 	for ch in root.get_children():
-		if ch is Node3D:
+		if ch is Node3D and not keep.has(ch):
 			(ch as Node3D).visible = false
-	n.position = Vector3(0, 0.02, bc.z)
+	n.position = Vector3(0, 0.02, float(info.get("zc", bc.z)))
 	root.add_child(n)
+	# محاور المجسم: نحرك العجلات لأقواسها (والفيزياء تتبعها)
+	if info.has("axles"):
+		var ax: Array = info["axles"]
+		var wp: Array = d["wheel_pos"]
+		for i in 4:
+			var p: Vector3 = wp[i]
+			p.z = float(ax[0]) if i < 2 else float(ax[1])
+			wp[i] = p
+			(d["wheels"][i]["pivot"] as Node3D).position = p
+		for e in d.get("extra_wheels", []):
+			var sp: Node3D = e["spin"]
+			(sp.get_parent() as Node3D).position.z = float(ax[2]) - float(ax[1])
 	d["skin"] = code
 
 
@@ -783,8 +897,9 @@ static func _build(body: String, paint: Color, deco: Array = []) -> Dictionary:
 		ww = 0.4
 	elif body.begins_with("semi"):
 		ww = 0.55
+	var wskin := "W04" if (body.begins_with("semi") or body == "truck") else ""
 	for i in 4:
-		var wh := _wheel(r, ww)
+		var wh := _wheel(r, ww, wskin, -1.0 if i % 2 == 0 else 1.0)
 		wh["pivot"].position = wpos[i]
 		root.add_child(wh["pivot"])
 		wheels.append(wh)
@@ -792,7 +907,7 @@ static func _build(body: String, paint: Color, deco: Array = []) -> Dictionary:
 	var extra := []
 	if extra_z != 0.0:
 		for i in [2, 3]:
-			var wh2 := _wheel(r, ww)
+			var wh2 := _wheel(r, ww, wskin, -1.0 if i == 2 else 1.0)
 			wh2["pivot"].position = Vector3(0, 0, extra_z - wzr)
 			(wheels[i]["pivot"] as Node3D).add_child(wh2["pivot"])
 			extra.append({"spin": wh2["spin"], "src": i})

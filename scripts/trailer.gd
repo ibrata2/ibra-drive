@@ -108,6 +108,18 @@ func setup(kind_id: String, cargo_col: Color, paint: Color, second := false, dou
 				add_child(lb)
 			CarModel._box(self, Vector3(body_w - 0.1, h - 0.1, 0.05), Vector3(0, deck_y + h * 0.5, rear_z + 0.01), CarModel.mat("plain", Color(0.5, 0.5, 0.52)))
 			CarModel._box(self, Vector3(0.05, h - 0.2, 0.06), Vector3(0, deck_y + h * 0.5, rear_z + 0.04), B)
+			# مجسم المقطورة من مكتبة IBRA (T04): يخفي الصندوق المرسوم ويخلي العجلات واللوحات
+			var top := deck_y + h
+			var full_h := (top - deck_y) / 0.7
+			var sk := CarModel.skin_node("T04", 0.0, 0.0, col, Vector3(body_w, full_h, body_len))
+			if sk != null:
+				for ch in get_children():
+					if ch is MeshInstance3D and (ch as MeshInstance3D).material_override != tail_mat:
+						(ch as MeshInstance3D).visible = false
+				sk.position = Vector3(0, top - full_h, (front_z + rear_z) * 0.5)
+				add_child(sk)
+				# سقف مسكّر (سقف المجسم مفتوح وبيه أضلاع)
+				CarModel._box(self, Vector3(body_w * 0.97, 0.05, body_len * 0.985), Vector3(0, top - 0.06, (front_z + rear_z) * 0.5), BM)
 			if kind == "reefer":
 				CarModel._box(self, Vector3(1.9, 1.4, 0.5), Vector3(0, deck_y + h - 0.8, front_z - 0.25), CarModel.mat("plain", Color(0.75, 0.77, 0.8)))
 			if opts.has("slogan"):
@@ -178,7 +190,7 @@ func setup(kind_id: String, cargo_col: Color, paint: Color, second := false, dou
 
 func _axle(z: float, B: Material, C: Material) -> void:
 	for s in [-1.0, 1.0]:
-		var w := CarModel._wheel(wheel_r, 0.42 if kind != "water_small" else 0.28)
+		var w := CarModel._wheel(wheel_r, 0.42 if kind != "water_small" else 0.28, "W04" if kind != "water_small" else "", s)
 		var pv: Node3D = w["pivot"]
 		pv.position = Vector3((body_w * 0.5 - 0.3) * s, wheel_r, z)
 		add_child(pv)

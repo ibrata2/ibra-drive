@@ -3,7 +3,7 @@ config_version=5
 
 [application]
 
-config/version="2.2.0"
+config/version="2.3.0"
 config/name="IBRA DRIVE"
 config/description="مغامرات بالسيارات — أكثر من 100 مكان"
 run/main_scene="res://main.tscn"

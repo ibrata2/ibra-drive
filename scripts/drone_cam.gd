@@ -11,6 +11,8 @@ const MODES := [
 var target: RigidBody3D
 var world: Node
 var mode := 0
+## مسافة زيادة لكاميرا المطاردة (الشاحنة ويه المقطورات) حتى ما تدخل جوه المقطورة
+var chase_extra := 0.0
 var zoom := 1.0
 var yaw := 0.0
 var t := 0.0
@@ -55,7 +57,8 @@ func _process(delta: float) -> void:
 	var sway := Vector3.ZERO
 	if mode == 0 or mode == 3:
 		sway = side * sin(t * 0.23) * 2.0 + Vector3.UP * sin(t * 0.31) * 0.6
-	var desired: Vector3 = target.global_position + back * m["dist"] * zoom + Vector3.UP * m["height"] * zoom + sway
+	var ex := chase_extra if mode == 1 else 0.0
+	var desired: Vector3 = target.global_position + back * (m["dist"] * zoom + ex) + Vector3.UP * (m["height"] * zoom + ex * 0.35) + sway
 	if world and world.has_method("h_at"):
 		desired.y = maxf(desired.y, world.h_at(desired.x, desired.z) + 2.0)
 	fov = lerpf(fov, m["fov"] + clampf(flat.length() - 25.0, 0.0, 30.0) * 0.3, 1.0 - exp(-2.0 * delta))

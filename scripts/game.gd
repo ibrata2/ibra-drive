@@ -54,7 +54,7 @@ const CARS := [
 		"speed": 31.0, "accel": 1.15, "grip": 0.95, "offroad": 1.15, "fuel": 260.0, "mass": 3600.0, "loot_bonus": 0.2},
 	# رؤوس التريلات — تنشرى وتنطور من كراج الشاحنات (ما تطلع بالكراج القديم)
 	{"id": "semi_rafidain", "name": "قاطرة الرافدين", "desc": "رأس تريلة بكابينة مسطحة. شاحنة البداية بشركة النقل.",
-		"price": {}, "body": "semi", "drive": "rwd", "paint": Color(0.78, 0.1, 0.08), "hidden": true, "truck": true,
+		"price": {}, "body": "semi", "drive": "rwd", "paint": Color(0.78, 0.1, 0.08), "hidden": true, "truck": true, "skin": "T01",
 		"speed": 26.0, "accel": 1.25, "grip": 0.95, "offroad": 0.7, "fuel": 420.0, "mass": 7500.0},
 	{"id": "semi_dijla", "name": "قاطرة دجلة", "desc": "بوز طويل ومحرك أقوى، تسحب مقطورتين براحة.",
 		"price": {"coins": 9000}, "body": "semi_long", "drive": "rwd", "paint": Color(0.12, 0.32, 0.62), "hidden": true, "truck": true,

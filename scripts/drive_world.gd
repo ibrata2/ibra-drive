@@ -2049,6 +2049,11 @@ func _apply_load() -> void:
 
 
 func _place_trailers() -> void:
+	if cam != null and "chase_extra" in cam:
+		var ln := 0.0
+		for tt in trailers:
+			ln += (tt as TruckTrailer).body_len
+		cam.set("chase_extra", ln)
 	var prev := car.global_transform * (car.model["hitch"] as Vector3)
 	var fwd := -car.global_basis.z
 	for t in trailers:
