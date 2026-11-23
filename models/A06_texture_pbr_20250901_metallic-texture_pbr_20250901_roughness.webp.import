@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bidficcgrwopf"
-path="res://.godot/imported/A06_texture_pbr_20250901_metallic-texture_pbr_20250901_roughness.webp-2eafa28d35256d521466a8c2ba2b4f4f.ctex"
+path.s3tc="res://.godot/imported/A06_texture_pbr_20250901_metallic-texture_pbr_20250901_roughness.webp-2eafa28d35256d521466a8c2ba2b4f4f.s3tc.ctex"
+path.etc2="res://.godot/imported/A06_texture_pbr_20250901_metallic-texture_pbr_20250901_roughness.webp-2eafa28d35256d521466a8c2ba2b4f4f.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "f74a35a0de30dbc2a1384447ae624723"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/A06_texture_pbr_20250901_metallic-texture_pbr_20250901_roughness.webp"
-dest_files=["res://.godot/imported/A06_texture_pbr_20250901_metallic-texture_pbr_20250901_roughness.webp-2eafa28d35256d521466a8c2ba2b4f4f.ctex"]
+dest_files=["res://.godot/imported/A06_texture_pbr_20250901_metallic-texture_pbr_20250901_roughness.webp-2eafa28d35256d521466a8c2ba2b4f4f.s3tc.ctex", "res://.godot/imported/A06_texture_pbr_20250901_metallic-texture_pbr_20250901_roughness.webp-2eafa28d35256d521466a8c2ba2b4f4f.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1
@@ -33,5 +35,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=0
+process/size_limit=512
 detect_3d/compress_to=1
