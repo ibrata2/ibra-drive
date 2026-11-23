@@ -40,6 +40,9 @@ func _ready() -> void:
 	_select(first if first != "" else Story.STORIES[0]["car"])
 
 
+var hero_node: Node3D
+
+
 func _process(delta: float) -> void:
 	t += delta
 	turn.rotation.y += delta * 0.25
@@ -50,9 +53,20 @@ func _process(delta: float) -> void:
 func _show_model(car_id: String) -> void:
 	for c in holder.get_children():
 		c.queue_free()
-	var m := CarModel.build(Game.get_car(car_id)["body"], Game.car_paint(car_id), Game.car_deco(car_id))
+	if is_instance_valid(hero_node):
+		hero_node.queue_free()
+	var m := CarModel.build(Game.get_car(car_id)["body"], Game.car_paint(car_id), Game.car_deco(car_id), Game.car_skin(car_id))
 	holder.add_child(m["root"])
 	holder.position = Vector3(-4.0, 0, 2.0)
+	# بطل القصة واكف يم سيارته (إذا عنده مجسم بمكتبة IBRA)
+	var hero_code: String = {"semi_rafidain": "C01", "pickup": "C02", "rally": "C03", "sedan": "C04", "buggy": "C05"}.get(car_id, "")
+	if hero_code != "":
+		var h := CarModel.skin_node(hero_code)
+		if h != null:
+			hero_node = h
+			add_child(h)
+			h.position = Vector3(-7.6, 0, 8.0)
+			h.rotation.y = -0.55
 	if car_id.begins_with("semi"):
 		var tr := TruckTrailer.new()
 		holder.add_child(tr)

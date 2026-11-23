@@ -460,7 +460,110 @@ static func _sphere_m(parent: Node3D, r: float, pos: Vector3, m: Material, sc: V
 
 
 ## يرجع: root, wheels(pivot/spin), wheel_pos, radius, rest, box_size, box_center, com_y, head_pos, tail_mat
-static func build(body: String, paint: Color, deco: Array = []) -> Dictionary:
+static func build(body: String, paint: Color, deco: Array = [], skin := "") -> Dictionary:
+	var d := _build(body, paint, deco)
+	if skin != "" and SKINS.has(skin):
+		apply_skin(d, skin)
+	return d
+
+
+# ================================================================ مجسمات مكتبة IBRA (GLB)
+## file = ملف المجسم بمجلد models • yaw = تدوير حتى مقدمته تصير باتجاه السير (-Z) • len = الطول الحقيقي بالمتر
+const SKINS := {
+	"A01": {"yaw": PI, "len": 4.75, "name": "جيب أصفر"},
+	"A02": {"yaw": PI, "len": 4.45, "name": "سايبا صفرة"},
+	"A03": {"yaw": PI, "len": 4.7, "name": "سيارة صفرة"},
+	"A04": {"yaw": PI, "len": 4.7, "name": "سيارة كهربائية زرقة"},
+	"A05": {"yaw": PI, "len": 4.85, "name": "سيارة فضية"},
+	"A06": {"yaw": PI, "len": 4.5, "name": "سيارة زرقة قديمة"},
+	"V01": {"yaw": PI, "len": 1.75, "name": "بايسكل"},
+	"V02": {"yaw": PI, "len": 3.4, "name": "ستوتة"},
+	"V03": {"yaw": PI, "len": 4.8, "name": "كيا حمل"},
+	"V04": {"yaw": PI, "len": 4.3, "name": "تاكسي سايبا"},
+	"V05": {"yaw": PI, "len": 6.6, "name": "جكسارة مدرعة"},
+	"V06": {"yaw": PI, "len": 4.4, "name": "سيارة متروكة"},
+	"V07": {"yaw": -PI / 2, "len": 4.8, "name": "بيكب متروك"},
+	"C01": {"h": 1.78}, "C02": {"h": 1.74}, "C03": {"h": 1.66},
+	"C04": {"h": 1.76}, "C05": {"h": 1.75}, "C06": {"h": 1.8},
+}
+static var _skin_cache := {}
+
+
+static func _skin_scene(code: String) -> PackedScene:
+	if not _skin_cache.has(code):
+		var path := "res://models/%s.glb" % code
+		_skin_cache[code] = load(path) if ResourceLoader.exists(path) else null
+	return _skin_cache[code]
+
+
+static func _aabb_of(n: Node3D, xf: Transform3D, acc: Array) -> void:
+	var t := xf * n.transform
+	if n is MeshInstance3D and (n as MeshInstance3D).mesh != null:
+		var bb: AABB = t * (n as MeshInstance3D).mesh.get_aabb()
+		acc[0] = bb if acc[0] == null else (acc[0] as AABB).merge(bb)
+	for c in n.get_children():
+		if c is Node3D:
+			_aabb_of(c, t, acc)
+
+
+## مجسم جاهز: سيارة (طوله = len أو length) أو شخصية (طولها = h). الأرضية y=0 والمركز على x/z.
+## يرجع null إذا المجسم مو موجود.
+static func skin_node(code: String, length := 0.0, fade := 0.0) -> Node3D:
+	var ps := _skin_scene(code)
+	if ps == null:
+		return null
+	var info: Dictionary = SKINS.get(code, {})
+	var inner: Node3D = ps.instantiate()
+	var spin := Node3D.new()
+	spin.rotation.y = float(info.get("yaw", 0.0))
+	spin.add_child(inner)
+	var acc := [null]
+	_aabb_of(inner, Transform3D(Basis(Vector3.UP, spin.rotation.y), Vector3.ZERO), acc)
+	var bb: AABB = acc[0] if acc[0] != null else AABB(Vector3(-0.5, 0, -0.5), Vector3.ONE)
+	var sc := 1.0
+	if info.has("h"):
+		sc = float(info["h"]) / maxf(bb.size.y, 0.01)
+	else:
+		var want := length if length > 0.0 else float(info.get("len", 4.5))
+		sc = want / maxf(bb.size.z, 0.01)
+	var wrap := Node3D.new()
+	wrap.name = "Skin_" + code
+	wrap.add_child(spin)
+	spin.scale = Vector3.ONE * sc
+	var c := bb.get_center()
+	spin.position = Vector3(-c.x * sc, -bb.position.y * sc, -c.z * sc)
+	if fade > 0.0:
+		_set_range(inner, fade)
+	return wrap
+
+
+static func _set_range(n: Node, dist: float) -> void:
+	if n is GeometryInstance3D:
+		(n as GeometryInstance3D).visibility_range_end = dist
+		(n as GeometryInstance3D).visibility_range_end_margin = dist * 0.1
+		(n as GeometryInstance3D).visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+	for c in n.get_children():
+		_set_range(c, dist)
+
+
+## يخفي الجسم المرسوم بالكود ويحط المجسم بمكانه (الفيزياء والعجلات الوهمية تبقى نفسها)
+static func apply_skin(d: Dictionary, code: String) -> void:
+	var root: Node3D = d["root"]
+	var box: Vector3 = d["box_size"]
+	var bc: Vector3 = d["box_center"]
+	var info: Dictionary = SKINS.get(code, {})
+	var n := skin_node(code, float(info.get("len", box.z)))
+	if n == null:
+		return
+	for ch in root.get_children():
+		if ch is Node3D:
+			(ch as Node3D).visible = false
+	n.position = Vector3(0, 0.02, bc.z)
+	root.add_child(n)
+	d["skin"] = code
+
+
+static func _build(body: String, paint: Color, deco: Array = []) -> Dictionary:
 	var root := Node3D.new()
 	root.name = "Model"
 	var P := paint_mat(paint)

@@ -24,11 +24,11 @@ const CARS := [
 	{"id": "buggy", "name": "باگي الرمال", "desc": "خفيفة وسريعة بالتسارع، ملكة الكثبان.",
 		"price": {"coins": 700, "scrap": 60}, "body": "buggy", "drive": "rwd", "paint": Color(1.0, 0.55, 0.1),
 		"speed": 36.0, "accel": 1.3, "grip": 0.74, "offroad": 0.95, "fuel": 70.0, "mass": 750.0},
-	{"id": "sedan", "name": "سيدان فخمة", "desc": "سيدان انسيابية فخمة بخطوط ناعمة — مثل سيارة الفيديو. مجانية ومن البداية.",
-		"price": {}, "body": "sedan", "drive": "rwd", "paint": Color(0.93, 0.92, 0.88),
+	{"id": "sedan", "name": "سيدان فخمة", "desc": "سيدان فضية فخمة. مجانية ومن البداية، وتكدر تبدلها للشكل الكلاسيكي وتصبغها.",
+		"price": {}, "body": "sedan", "drive": "rwd", "paint": Color(0.93, 0.92, 0.88), "skin": "A05",
 		"speed": 42.0, "accel": 1.15, "grip": 0.9, "offroad": 0.7, "fuel": 95.0, "mass": 1350.0},
 	{"id": "jeep", "name": "جيب الجبال", "desc": "دفع رباعي حقيقي، تصعد الجبال وتمشي بالثلج.",
-		"price": {"coins": 1500, "parts": 30}, "body": "jeep", "drive": "awd", "paint": Color(0.3, 0.42, 0.25),
+		"price": {"coins": 1500, "parts": 30}, "body": "jeep", "drive": "awd", "paint": Color(0.3, 0.42, 0.25), "skin": "A01",
 		"speed": 32.0, "accel": 1.05, "grip": 0.88, "offroad": 1.05, "fuel": 120.0, "mass": 1600.0},
 	{"id": "rally", "name": "سيارة الرالي", "desc": "تفحيط وسرعة بكل الأرضيات.",
 		"price": {"coins": 3000, "parts": 60, "crystals": 6}, "body": "rally", "drive": "awd", "paint": Color(0.85, 0.1, 0.12),
@@ -39,6 +39,19 @@ const CARS := [
 	{"id": "monster", "name": "مونستر تراك", "desc": "تايرات عملاقة تعبر أي شي.",
 		"price": {"coins": 7000, "parts": 120, "crystals": 25}, "body": "monster", "drive": "awd", "paint": Color(0.1, 0.75, 0.35),
 		"speed": 35.0, "accel": 1.25, "grip": 0.85, "offroad": 1.2, "fuel": 150.0, "mass": 2200.0},
+	# سيارات مكتبة IBRA (مجسمات مصممة) — شكلها ثابت من المجسم
+	{"id": "taxi", "name": "تاكسي سايبا", "desc": "التاكسي الأصفر المعروف. خفيف واقتصادي بالبانزين.",
+		"price": {"coins": 1200}, "body": "sedan", "drive": "rwd", "paint": Color(0.98, 0.78, 0.1), "skin": "V04", "skin_only": true,
+		"speed": 37.0, "accel": 1.0, "grip": 0.84, "offroad": 0.6, "fuel": 130.0, "mass": 1050.0},
+	{"id": "electric", "name": "الكهربائية الزرقة", "desc": "سيارة كهربائية هادئة وتسارعها خرافي. بطاريتها تطول.",
+		"price": {"coins": 5000, "parts": 40, "crystals": 8}, "body": "sedan", "drive": "awd", "paint": Color(0.12, 0.2, 0.42), "skin": "A04", "skin_only": true,
+		"speed": 44.0, "accel": 1.55, "grip": 0.92, "offroad": 0.62, "fuel": 150.0, "mass": 1700.0},
+	{"id": "kia", "name": "كيا حمل", "desc": "كيا البضاعة البيضاء. تشيل غنائم أكثر (+15%).",
+		"price": {"coins": 2200, "parts": 25}, "body": "pickup", "drive": "rwd", "paint": Color(0.95, 0.95, 0.95), "skin": "V03", "skin_only": true,
+		"speed": 30.0, "accel": 0.95, "grip": 0.82, "offroad": 0.72, "fuel": 120.0, "mass": 1500.0, "loot_bonus": 0.15},
+	{"id": "armored", "name": "جكسارة مدرعة", "desc": "ست عجلات ودرع ثقيل. ما يوكفها شي.",
+		"price": {"coins": 12000, "parts": 150, "crystals": 30}, "body": "truck", "drive": "awd", "paint": Color(0.42, 0.45, 0.3), "skin": "V05", "skin_only": true,
+		"speed": 31.0, "accel": 1.15, "grip": 0.95, "offroad": 1.15, "fuel": 260.0, "mass": 3600.0, "loot_bonus": 0.2},
 	# رؤوس التريلات — تنشرى وتنطور من كراج الشاحنات (ما تطلع بالكراج القديم)
 	{"id": "semi_rafidain", "name": "قاطرة الرافدين", "desc": "رأس تريلة بكابينة مسطحة. شاحنة البداية بشركة النقل.",
 		"price": {}, "body": "semi", "drive": "rwd", "paint": Color(0.78, 0.1, 0.08), "hidden": true, "truck": true,
@@ -179,6 +192,24 @@ func car_paint(id: String) -> Color:
 	if p is String:
 		return Color.from_string(p, get_car(id)["paint"])
 	return get_car(id)["paint"]
+
+
+## رمز المجسم المستخدم للسيارة ("" = الشكل الكلاسيكي المرسوم بالكود)
+func car_skin(id: String) -> String:
+	var c := get_car(id)
+	var sk: String = c.get("skin", "")
+	if sk == "" or c.get("skin_only", false):
+		return sk
+	return "" if car_deco(id).has("classic") else sk
+
+
+func toggle_classic(id: String) -> void:
+	var d := car_deco(id).duplicate()
+	if d.has("classic"):
+		d.erase("classic")
+	else:
+		d.append("classic")
+	set_deco(id, d)
 
 
 func car_deco(id: String) -> Array:

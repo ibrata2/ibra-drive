@@ -22,11 +22,11 @@ func _ready() -> void:
 	tr.position = Vector3(0, 0, (m["hitch"] as Vector3).z + tr.L)
 	tr.body.queue_free()
 	tr.area.queue_free()
-	var side := CarModel.build("jeep", Game.car_paint("jeep"))
+	var side := CarModel.build("jeep", Game.car_paint("jeep"), Game.car_deco("jeep"), Game.car_skin("jeep"))
 	(side["root"] as Node3D).position = Vector3(5.5, 0, 6.0)
 	(side["root"] as Node3D).rotation.y = 0.5
 	turn.add_child(side["root"])
-	var side2 := CarModel.build("sedan", Game.car_paint("sedan"))
+	var side2 := CarModel.build("sedan", Game.car_paint("sedan"), Game.car_deco("sedan"), Game.car_skin("sedan"))
 	(side2["root"] as Node3D).position = Vector3(-5.5, 0, 9.0)
 	(side2["root"] as Node3D).rotation.y = -0.4
 	turn.add_child(side2["root"])
@@ -113,7 +113,7 @@ func _build_ui() -> void:
 	v.add_child(sp)
 	var info := UIKit.label("فلوس %d  •  السمعة %d (%s)  •  مستوى الاستكشاف %d" % [int(Game.data["coins"]), Jobs.rep(), Jobs.rep_title(), Game.level()], 17, Color(1, 0.82, 0.35))
 	v.add_child(info)
-	var ver := UIKit.label("v2.1.0  •  برمجة وتطوير إبراهيم الخزرجي\nتليكرام: t.me/ibraprogram  •  تيك توك: ibraprogram", 15, Color(0.62, 0.65, 0.72))
+	var ver := UIKit.label("v2.2.0  •  برمجة وتطوير إبراهيم الخزرجي\nتطبيقاتي: ibraprogram.netlify.app  •  تليكرام: t.me/ibraprogram  •  تيك توك: ibraprogram", 15, Color(0.62, 0.65, 0.72))
 	v.add_child(ver)
 
 

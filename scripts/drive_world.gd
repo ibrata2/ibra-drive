@@ -226,8 +226,16 @@ func _ready() -> void:
 			debug_fps = true
 		elif a.begins_with("--auto-kmh="):
 			auto_kmh = float(a.get_slice("=", 1))
-		elif a.begins_with("--start-s="):
-			var ss := float(a.get_slice("=", 1))
+		elif a.begins_with("--start-s=") or a.begins_with("--goto="):
+			var ss := 0.0
+			if a.begins_with("--goto="):
+				# --goto=check:-30  يبدي قبل أول ميزة من هالنوع بمسافة
+				for g in features:
+					if g["type"] == a.get_slice("=", 1).get_slice(":", 0):
+						ss = float(g["s"]) + float(a.get_slice(":", 1) if a.contains(":") else "-40")
+						break
+			else:
+				ss = float(a.get_slice("=", 1))
 			var sp2 := _route_pos(ss, road_half * 0.45)
 			car.global_transform = Transform3D(Basis(Vector3.UP, road_yaw(ss)), Vector3(sp2.x, ground_h(sp2.x, sp2.z) + 1.4, sp2.z))
 			_place_trailers()
@@ -1509,6 +1517,7 @@ func _build_depot(f: Dictionary) -> void:
 		var arch := _m(Color(0.85, 0.2, 0.12))
 		_rbox(node, body, s0 + 14.0, -road_half - 2.2, 0.0, Vector3(0.6, 7.0, 0.6), arch, 0.0, gy)
 		_rbox(node, body, s0 + 14.0, road_half + 2.2, 0.0, Vector3(0.6, 7.0, 0.6), arch, 0.0, gy)
+		_place_model(node, "C02", s0 + 10.0, road_half + 4.0, -PI / 2.0, gy, 180.0)
 		_rbox(node, null, s0 + 14.0, 0.0, 6.6, Vector3(road_half * 2.0 + 5.0, 1.4, 0.4), arch, 0.0, gy)
 		var gp := _route_pos(s0 + 13.7, 0.0)
 		_label3d(node, "نقليات الرافدين — %s" % cname, Vector3(gp.x, gy + 7.3, gp.z), road_yaw(s0), 110, Color(1, 1, 1), 0.012)
@@ -1622,6 +1631,35 @@ func _build_camp(f: Dictionary) -> void:
 		_label3d(node, dest_name, Vector3(lp.x, gy + 6.0, lp.z), road_yaw(s0), 140, Color(1, 0.85, 0.4), 0.015)
 
 
+## يحط مجسم من مكتبة IBRA على الطريق: s/u إحداثيات الطريق، turn = تدوير زيادة عن اتجاه السير
+func _place_model(parent: Node3D, code: String, s: float, u: float, turn := 0.0, y = null, fade := 260.0) -> Node3D:
+	var n := CarModel.skin_node(code, 0.0, fade)
+	if n == null:
+		return null
+	parent.add_child(n)
+	var p := _route_pos(s, u)
+	var gy: float = ground_h(p.x, p.z) if y == null else float(y)
+	n.global_transform = Transform3D(Basis(Vector3.UP, road_yaw(s) + turn), Vector3(p.x, gy, p.z))
+	return n
+
+
+## سيارة واقفة بصندوق تصادم حتى ما تعبر من خلالها
+func _parked_car(parent: Node3D, code: String, s: float, u: float, turn := 0.0) -> void:
+	var n := _place_model(parent, code, s, u, turn)
+	if n == null:
+		return
+	var info: Dictionary = CarModel.SKINS.get(code, {})
+	var ln := float(info.get("len", 4.5))
+	var sb := StaticBody3D.new()
+	var cs := CollisionShape3D.new()
+	var bs := BoxShape3D.new()
+	bs.size = Vector3(ln * 0.4, 1.5, ln * 0.92)
+	cs.shape = bs
+	cs.position = Vector3(0, 0.75, 0)
+	sb.add_child(cs)
+	n.add_child(sb)
+
+
 func _build_town(f: Dictionary) -> void:
 	var node := Node3D.new()
 	add_child(node)
@@ -1632,6 +1670,8 @@ func _build_town(f: Dictionary) -> void:
 	var s1 := float(f["s1"])
 	var small: bool = f.get("small", false)
 	var xfs: Array = []
+	var parked := 0
+	var people := 0
 	var trng := RandomNumberGenerator.new()
 	trng.seed = route_seed + int(s0)
 	for side in [-1.0, 1.0]:
@@ -1657,6 +1697,17 @@ func _build_town(f: Dictionary) -> void:
 				body.add_child(cs)
 				cs.global_transform = Transform3D(Basis(Vector3.UP, road_yaw(s)), xf.origin)
 				cs.set_meta("prop", {"kind": "building", "holes": 0})
+				# سيارات واقفة وناس كدام المحلات (من مكتبة IBRA)
+				if parked < (3 if small else 6) and trng.randf() < 0.35:
+					var codes := ["A02", "V04", "V03", "A03", "A06", "A05", "A04", "V02", "V01"]
+					var pc: String = codes[trng.randi() % codes.size()]
+					_parked_car(node, pc, s + trng.randf_range(-2.0, 2.0), float(side) * (road_half + 6.0), PI if trng.randf() < 0.5 else 0.0)
+					parked += 1
+				elif people < (2 if small else 4) and trng.randf() < 0.3:
+					var who := ["C01", "C03", "C04", "C05"]
+					var pp := float(side) * (road_half + 9.0)
+					_place_model(node, who[trng.randi() % who.size()], s, pp, -float(side) * PI / 2.0 + trng.randf_range(-0.4, 0.4), null, 160.0)
+					people += 1
 				# لوحات محلات
 				if trng.randf() < 0.45:
 					var shops := ["أسواق", "مطعم", "صيدلية", "كهربائيات", "حلويات", "عطارية", "مخبز", "اتصالات"]
@@ -1742,11 +1793,12 @@ func _build_checkpoint(f: Dictionary) -> void:
 		_rbox(node, null, s0, side * (road_half + 4.2), 2.7, Vector3(3.2, 0.25, 3.2), _m(Color(0.3, 0.32, 0.25)), 0.0, gy)
 		_rbox(node, null, s0 - 1.31, side * (road_half + 4.2), 1.2, Vector3(1.6, 0.9, 0.06), _m(Color(0.2, 0.3, 0.4), 0.0, 0.5, 0.1), 0.0, gy)
 		# جنود
-		var sol := _m(Color(0.35, 0.38, 0.28))
-		var skin := _m(Color(0.75, 0.55, 0.42))
-		_rbox(node, null, s0 - 3.0, side * (road_half + 2.6), 0.0, Vector3(0.5, 1.25, 0.35), sol, 0.0, gy)
-		_rbox(node, null, s0 - 3.0, side * (road_half + 2.6), 1.25, Vector3(0.28, 0.3, 0.28), skin, 0.0, gy)
-		_rbox(node, null, s0 - 3.0, side * (road_half + 2.6), 1.52, Vector3(0.34, 0.1, 0.34), sol, 0.0, gy)
+		if _place_model(node, "C06", s0 - 3.0, side * (road_half + 2.6), -side * PI / 2.0, gy) == null:
+			var sol := _m(Color(0.35, 0.38, 0.28))
+			var skin := _m(Color(0.75, 0.55, 0.42))
+			_rbox(node, null, s0 - 3.0, side * (road_half + 2.6), 0.0, Vector3(0.5, 1.25, 0.35), sol, 0.0, gy)
+			_rbox(node, null, s0 - 3.0, side * (road_half + 2.6), 1.25, Vector3(0.28, 0.3, 0.28), skin, 0.0, gy)
+			_rbox(node, null, s0 - 3.0, side * (road_half + 2.6), 1.52, Vector3(0.34, 0.1, 0.34), sol, 0.0, gy)
 	# علم العراق
 	_rbox(node, null, s0 + 2.0, road_half + 7.0, 0.0, Vector3(0.12, 7.0, 0.12), _m(Color(0.7, 0.7, 0.7), 0.0, 0.6, 0.4), 0.0, gy)
 	_rbox(node, null, s0 + 2.0, road_half + 7.85, 6.5, Vector3(1.6, 0.33, 0.04), red, 0.0, gy)
@@ -1837,6 +1889,13 @@ func _build_station(f: Dictionary) -> void:
 	# لوحة المحطة
 	var sp := _route_pos(s0 - 26.0, road_half + 4.0)
 	_rbox(node, null, s0 - 26.0, road_half + 4.0, 0.0, Vector3(0.3, 6.5, 0.3), _m(Color(0.6, 0.6, 0.62)), 0.0, gy)
+	# العامل بالمحطة وسيارة واقفة
+	var who := {"fuel": "C05", "food": "C04", "garage": "C02"}
+	_place_model(node, who[tp], s0 + 9.0, cu - 9.0, -PI / 2.0, gy, 180.0)
+	if tp == "food":
+		_parked_car(node, "A02" if int(s0) % 2 == 0 else "V04", s0 - 12.0, cu + 2.0, PI / 2.0)
+	elif tp == "garage":
+		_parked_car(node, "V06", s0 - 10.0, cu + 4.0, 0.4)
 	var sign_col := {"fuel": Color(0.1, 0.55, 0.3), "food": Color(0.75, 0.25, 0.1), "garage": Color(0.2, 0.3, 0.55)}
 	_rbox(node, null, s0 - 26.0, road_half + 4.0, 5.0, Vector3(5.0, 1.8, 0.2), _m(sign_col[tp], 0.4), 0.0, gy)
 	var lp3 := _route_pos(s0 - 26.12, road_half + 4.0)
@@ -1879,7 +1938,7 @@ func _build_stuck(f: Dictionary) -> void:
 	var s0 := float(f["s"])
 	var u := float(f["u"])
 	var p := _route_pos(s0, u)
-	var m := CarModel.build("pickup" if style != "marsh" else "jeep", Color(0.7, 0.66, 0.6))
+	var m := CarModel.build("pickup" if style != "marsh" else "jeep", Color(0.7, 0.66, 0.6), [], "V07" if int(s0) % 2 == 0 else "V06")
 	var r: Node3D = m["root"]
 	add_child(r)
 	r.global_transform = Transform3D(Basis(Vector3.UP, road_yaw(s0) + 0.6) * Basis(Vector3.FORWARD, 0.12), Vector3(p.x, ground_h(p.x, p.z) - 0.35, p.z))
@@ -2581,7 +2640,7 @@ func _attach_tow(f: Dictionary) -> void:
 	towing = true
 	var t := TruckTrailer.new()
 	add_child(t)
-	t.setup("car", Color.WHITE, Color.WHITE, false, false, {"body": "pickup" if style != "marsh" else "jeep", "paint": Color(0.7, 0.66, 0.6)})
+	t.setup("car", Color.WHITE, Color.WHITE, false, false, {"body": "pickup" if style != "marsh" else "jeep", "paint": Color(0.7, 0.66, 0.6), "skin": "V07" if int(f["s"]) % 2 == 0 else "V06"})
 	trailers.append(t)
 	_place_trailers()
 	_link_trailer(t)

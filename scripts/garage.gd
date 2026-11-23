@@ -12,6 +12,7 @@ var xp_bar: ProgressBar
 var cars_list: VBoxContainer
 var up_list: VBoxContainer
 var paint_grid: GridContainer
+var look_box: VBoxContainer
 var name_label: Label
 var desc_label: Label
 var stats_box: VBoxContainer
@@ -181,7 +182,7 @@ func _build_room() -> void:
 func _show_car(id: String) -> void:
 	for c in car_holder.get_children():
 		c.queue_free()
-	var m := CarModel.build(Game.get_car(id)["body"], Game.car_paint(id))
+	var m := CarModel.build(Game.get_car(id)["body"], Game.car_paint(id), Game.car_deco(id), Game.car_skin(id))
 	car_holder.add_child(m["root"])
 
 
@@ -274,7 +275,10 @@ func _build_ui() -> void:
 	side.add_child(tabs)
 	cars_list = _scroll_tab("السيارات")
 	up_list = _scroll_tab("التطوير")
-	var pt := _scroll_tab("الصبغ")
+	var pt := _scroll_tab("الصبغ والشكل")
+	look_box = VBoxContainer.new()
+	look_box.add_theme_constant_override("separation", 8)
+	pt.add_child(look_box)
 	paint_grid = GridContainer.new()
 	paint_grid.columns = 4
 	paint_grid.add_theme_constant_override("h_separation", 10)
@@ -486,6 +490,24 @@ func _refresh_upgrades() -> void:
 func _refresh_paint() -> void:
 	for c in paint_grid.get_children():
 		c.queue_free()
+	for c in look_box.get_children():
+		c.queue_free()
+	var car := Game.get_car(preview_id)
+	var sk: String = car.get("skin", "")
+	if sk != "" and car.get("skin_only", false):
+		look_box.add_child(_label("شكل هذي السيارة ثابت (مجسم مصمم)، ما تنصبغ.", 16, Color(0.8, 0.85, 0.9)))
+		return
+	if sk != "" and Game.owns(preview_id):
+		var pro := Game.car_skin(preview_id) != ""
+		var tb := _button("الشكل: احترافي (مجسم)" if pro else "الشكل: كلاسيكي (تنصبغ)", Color(0.55, 0.38, 0.08) if pro else Color(0.2, 0.32, 0.5), 17)
+		tb.pressed.connect(func():
+			Game.toggle_classic(preview_id)
+			_show_car(preview_id)
+			_refresh())
+		look_box.add_child(tb)
+		if pro:
+			look_box.add_child(_label("الصبغ يشتغل على الشكل الكلاسيكي. اضغط الزر حتى تبدل.", 15, Color(0.75, 0.78, 0.85)))
+			return
 	if not Game.owns(preview_id):
 		paint_grid.add_child(_label("اشتري السيارة أول", 16, Color(0.9, 0.6, 0.4)))
 		return

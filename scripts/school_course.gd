@@ -239,7 +239,7 @@ func _in_zone(z: Dictionary, p: Vector3) -> bool:
 
 
 func _parked(pos: Vector3, yaw: float) -> void:
-	var m := CarModel.build(["sedan", "pickup", "rally"][obstacles.size() % 3], [Color(0.2, 0.3, 0.6), Color(0.8, 0.8, 0.78), Color(0.6, 0.15, 0.12), Color(0.3, 0.3, 0.32)][obstacles.size() % 4])
+	var m := CarModel.build(["sedan", "pickup", "sedan", "rally"][obstacles.size() % 4], [Color(0.2, 0.3, 0.6), Color(0.8, 0.8, 0.78), Color(0.6, 0.15, 0.12), Color(0.3, 0.3, 0.32)][obstacles.size() % 4], [], ["A06", "V03", "V04", "A02"][obstacles.size() % 4])
 	var body := StaticBody3D.new()
 	add_child(body)
 	body.add_child(m["root"])

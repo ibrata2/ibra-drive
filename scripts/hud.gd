@@ -285,7 +285,7 @@ func _build_pause() -> void:
 	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(info)
 	info_label = info
-	var cr := _label("برمجة وتطوير إبراهيم الخزرجي\nتليكرام: t.me/ibraprogram • تيك توك: ibraprogram", 14, Color(1, 0.8, 0.4))
+	var cr := _label("برمجة وتطوير إبراهيم الخزرجي\nتطبيقاتي: ibraprogram.netlify.app\nتليكرام: t.me/ibraprogram • تيك توك: ibraprogram", 14, Color(1, 0.8, 0.4))
 	cr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(cr)
 

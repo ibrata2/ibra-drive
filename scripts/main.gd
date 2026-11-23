@@ -280,7 +280,7 @@ func _carshow() -> void:
 			single = a.get_slice("=", 1)
 	if single != "":
 		for k in 3:
-			var mm := CarModel.build(Game.get_car(single)["body"], Game.get_car(single)["paint"])
+			var mm := CarModel.build(Game.get_car(single)["body"], Game.get_car(single)["paint"], [], Game.car_skin(single))
 			var rr: Node3D = mm["root"]
 			rr.position = Vector3(-6.0 + k * 5.5, 0, 0)
 			rr.rotation.y = [0.7, 2.6, -1.57][k]
@@ -297,7 +297,7 @@ func _carshow() -> void:
 	for c in Game.CARS:
 		if only and i > 2:
 			break
-		var m := CarModel.build(c["body"], c["paint"])
+		var m := CarModel.build(c["body"], c["paint"], [], String(c.get("skin", "")))
 		var root: Node3D = m["root"]
 		root.position = Vector3(-15.0 + (i % 4) * 9.0, 0, -4.0 + int(i / 4) * 9.0)
 		root.rotation.y = 0.9

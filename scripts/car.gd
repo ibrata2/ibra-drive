@@ -50,7 +50,7 @@ func setup(id: String, paint: Color) -> void:
 	stats = Game.car_stats(id)
 	mass = stats["mass"]
 	base_mass = mass
-	model = CarModel.build(stats["body"], paint, Game.car_deco(id))
+	model = CarModel.build(stats["body"], paint, Game.car_deco(id), Game.car_skin(id))
 	add_child(model["root"])
 	wheel_r = model["radius"]
 	rest_len = model["rest"]

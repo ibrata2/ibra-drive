@@ -217,7 +217,7 @@ func _flat_cargo(y: float, col: Color, opts: Dictionary) -> void:
 
 
 func _towed_car(opts: Dictionary) -> void:
-	var m := CarModel.build(opts.get("body", "pickup"), opts.get("paint", Color(0.55, 0.5, 0.45)))
+	var m := CarModel.build(opts.get("body", "pickup"), opts.get("paint", Color(0.55, 0.5, 0.45)), [], String(opts.get("skin", "")))
 	var r: Node3D = m["root"]
 	# السيارة المسحوبة: الوجه يم الساحبة، المحور الخلفي على مركز المقطورة
 	r.position = Vector3(0, 0, -1.4)
