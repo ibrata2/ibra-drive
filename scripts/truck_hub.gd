@@ -476,7 +476,7 @@ func _fill_deco() -> void:
 			_refresh_all())
 		deco_list.add_child(lb)
 		if pro:
-			deco_list.add_child(UIKit.label("الصبغ يشتغل على المجسم. الكروم والأضواء والأعلام تطلع بالشكل الكلاسيكي.", 15, Color(0.75, 0.78, 0.85), true))
+			deco_list.add_child(UIKit.label("المجسم ملون من التصميم وما ينصبغ. الصبغ والكروم والأضواء والأعلام تشتغل على الشكل الكلاسيكي.", 15, Color(0.75, 0.78, 0.85), true))
 	deco_list.add_child(UIKit.label("صبغ الكابينة", 22, UIKit.GOLD))
 	deco_list.add_child(_color_grid(func(col: Color):
 		Game.set_paint(cab, col)
